@@ -12,30 +12,49 @@
             align-items: center;
             height: 100vh;
             background-color: #87CEEB; /* Light blue sky */
+            overflow: hidden;
+            touch-action: manipulation; /* Enable touch for mobile */
         }
         canvas {
             border: 1px solid black;
         }
-        #gameOver {
+        #gameOver, #restartButton {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             font-family: Arial, sans-serif;
+            text-align: center;
+            display: none;
+        }
+        #gameOver {
             font-size: 48px;
             color: red;
-            display: none;
+        }
+        #restartButton {
+            font-size: 24px;
+            padding: 10px 20px;
+            background-color: #4CAF50; /* Green button */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #restartButton:hover {
+            background-color: #45a049; /* Darker green on hover */
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
     <div id="gameOver">Game Over</div>
+    <button id="restartButton">Restart</button>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const gameOverText = document.getElementById('gameOver');
+        const restartButton = document.getElementById('restartButton');
 
         // Skater (Ice Harvester) settings
         const skater = {
@@ -47,6 +66,7 @@
             dx: 0, // Horizontal movement on track
             dy: 0, // Vertical movement (gravity)
             offset: 0, // Offset from track center
+            skateAngle: 0, // Angle for skating motion
             color: '#4682B4' // Blue eskimo suit (placeholder)
         };
 
@@ -60,15 +80,26 @@
         // Gravity and physics
         const gravity = 0.5;
         const trackWidth = 20; // Width of the track
+        let gameRunning = true;
 
-        // Draw the track (sinusoidal icy path)
+        // Draw the track (mostly flat with occasional ramps/drops)
         function drawTrack() {
             ctx.strokeStyle = track.color;
             ctx.lineWidth = trackWidth;
             ctx.beginPath();
             for (let x = 0; x < canvas.width + 1000; x += 10) { // Extend track for smooth scrolling
                 const trackPos = x - track.position;
-                const y = 300 + 100 * Math.sin(trackPos / 100 * Math.PI);
+                // Mostly flat, with occasional ramps (sinusoidal with lower amplitude and ramps)
+                let y;
+                if (trackPos % 800 < 200) { // Flat section
+                    y = 300;
+                } else if (trackPos % 800 < 400) { // Ramp up (skate park schans)
+                    y = 300 - 50 * Math.sin((trackPos % 800 - 200) / 200 * Math.PI);
+                } else if (trackPos % 800 < 600) { // Flat section
+                    y = 250;
+                } else { // Drop (afdaling for extra speed)
+                    y = 250 + 50 * Math.sin((trackPos % 800 - 600) / 200 * Math.PI);
+                }
                 if (x === 0) {
                     ctx.moveTo(x, y);
                 } else {
@@ -80,13 +111,9 @@
 
         // Draw the skater (placeholder - replace with your image)
         function drawSkater() {
-            // Placeholder for now - replace with your image (skater.png)
-            ctx.fillStyle = skater.color; // Blue eskimo suit
+            // Blue eskimo suit (body)
+            ctx.fillStyle = skater.color; // Blue
             ctx.fillRect(skater.x, skater.y, skater.width, skater.height);
-
-            // Gray boots (bottom)
-            ctx.fillStyle = '#808080'; // Gray
-            ctx.fillRect(skater.x + 10, skater.y + skater.height - 20, 20, 20);
 
             // White hat
             ctx.fillStyle = '#FFFFFF'; // White
@@ -97,23 +124,54 @@
             // Brown beard
             ctx.fillStyle = '#8B4513'; // Brown
             ctx.fillRect(skater.x + 10, skater.y + 30, 20, 10);
+
+            // Gray feet with moving skates
+            ctx.fillStyle = '#808080'; // Gray feet
+            ctx.fillRect(skater.x + 5, skater.y + skater.height - 20, 15, 10); // Left foot
+            ctx.fillRect(skater.x + 20, skater.y + skater.height - 20, 15, 10); // Right foot
+
+            // Moving skate blades (animate when accelerating)
+            const bladeLength = 15;
+            const bladeOffset = Math.sin(skater.skateAngle) * 5; // Oscillating motion
+            ctx.strokeStyle = '#000000'; // Black skates
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(skater.x + 5, skater.y + skater.height - 10);
+            ctx.lineTo(skater.x + 5 + bladeOffset, skater.y + skater.height - 10 + bladeLength);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(skater.x + 20, skater.y + skater.height - 10);
+            ctx.lineTo(skater.x + 20 + bladeOffset, skater.y + skater.height - 10 + bladeLength);
+            ctx.stroke();
         }
 
         // Update skater and track position
         function update() {
+            if (!gameRunning) return;
+
             // Apply gravity
             skater.dy += gravity;
             skater.y += skater.dy;
 
             // Calculate track position at skater's x (accounting for scroll)
             const trackX = skater.x + track.position;
-            const trackY = 300 + 100 * Math.sin(trackX / 100 * Math.PI);
-            const trackAngle = Math.atan2(100 * Math.cos(trackX / 100 * Math.PI), 1); // Angle of the track
+            let trackY;
+            if (trackX % 800 < 200) { // Flat section
+                trackY = 300;
+            } else if (trackX % 800 < 400) { // Ramp up
+                trackY = 300 - 50 * Math.sin((trackX % 800 - 200) / 200 * Math.PI);
+            } else if (trackX % 800 < 600) { // Flat section
+                trackY = 250;
+            } else { // Drop
+                trackY = 250 + 50 * Math.sin((trackX % 800 - 600) / 200 * Math.PI);
+            }
+            const trackAngle = Math.atan2(50 * Math.cos(trackX / 200 * Math.PI), 1); // Angle for ramps/drops
 
             // Keep skater on track (simple collision)
             const halfTrackWidth = trackWidth / 2;
             const skaterHalfWidth = skater.width / 2;
-            if (Math.abs(skater.offset) > halfTrackWidth - skaterHalfWidth) {
+            if (Math.abs(skater.offset) > halfTrackWidth - skaterHalfWidth || skater.y > trackY + 50) {
                 gameOver();
                 return;
             }
@@ -129,10 +187,17 @@
             skater.x = canvas.width / 2 - skater.width / 2;
 
             // Apply sliding on ice (reduce speed gradually if not accelerating)
-            if (track.speed > 0 && !keys.ArrowUp) {
+            if (track.speed > 0 && !keys.ArrowUp && !touchActive) {
                 track.speed *= 0.98; // Slow down naturally on ice
             }
             if (track.speed < 0) track.speed = 0; // Prevent negative speed
+
+            // Animate skates when accelerating
+            if (track.speed > 0) {
+                skater.skateAngle += 0.1; // Oscillating motion for skates
+            } else {
+                skater.skateAngle = 0; // Reset if not moving
+            }
         }
 
         // Draw background
@@ -145,7 +210,7 @@
         const keys = {};
         document.addEventListener('keydown', (e) => {
             keys[e.key] = true;
-            if (e.key === 'ArrowUp') track.speed = 5; // Gas (move track faster)
+            if (e.key === 'ArrowUp' && track.speed < 10) track.speed = 5; // Gas (move track faster, cap at 10)
             if (e.key === 'ArrowDown') track.speed = 0; // Brake (stop track)
             if (e.key === 'ArrowLeft') skater.offset -= 2; // Move left on track
             if (e.key === 'ArrowRight') skater.offset += 2; // Move right on track
@@ -155,13 +220,52 @@
             keys[e.key] = false;
         });
 
+        // Handle touch input for mobile
+        let touchActive = false;
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchActive = true;
+            if (track.speed < 10) track.speed = 5; // Gas when touching
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            touchActive = false;
+            track.speed = 0; // Brake when releasing touch
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const touchX = touch.clientX - rect.left;
+            const centerX = canvas.width / 2;
+
+            if (touchX < centerX - 50) skater.offset -= 2; // Move left
+            else if (touchX > centerX + 50) skater.offset += 2; // Move right
+        });
+
         // Game over function
         function gameOver() {
+            gameRunning = false;
             gameOverText.style.display = 'block';
-            // Stop the game loop (optional: you can add a restart button)
-            // For now, just pause the game
-            track.speed = 0;
+            restartButton.style.display = 'block';
         }
+
+        // Restart function
+        restartButton.addEventListener('click', () => {
+            gameRunning = true;
+            gameOverText.style.display = 'none';
+            restartButton.style.display = 'none';
+            // Reset game state
+            skater.x = canvas.width / 2 - 20;
+            skater.y = 300 - skater.height; // Start on flat track
+            skater.dy = 0;
+            skater.offset = 0;
+            skater.skateAngle = 0;
+            track.position = 0;
+            track.speed = 0;
+        });
 
         // Main game loop
         function gameLoop() {
@@ -173,7 +277,7 @@
         }
 
         // Start the game with skater on track
-        skater.y = 300 - skater.height; // Start on the initial track position
+        skater.y = 300 - skater.height; // Start on the flat track
         gameLoop();
     </script>
 </body>
