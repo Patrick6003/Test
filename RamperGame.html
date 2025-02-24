@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rampers - Motorcycle Racing Game</title>
+    <title>Rampers - Ice Harvester Racing Game</title>
     <style>
         body {
             margin: 0;
@@ -16,50 +16,59 @@
         canvas {
             border: 1px solid black;
         }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial, sans-serif;
+            font-size: 48px;
+            color: red;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameOver">Game Over</div>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const gameOverText = document.getElementById('gameOver');
 
-        // Rider 1 (Pink motorcycle)
-        const rider1 = {
-            x: 50,
-            y: 500,
+        // Skater (Ice Harvester) settings
+        const skater = {
+            x: canvas.width / 2 - 20, // Start in middle of screen horizontally
+            y: 0, // Will be set to track position
             width: 40,
             height: 80,
             speed: 5,
-            dx: 0,
-            dy: 0,
-            color: '#FFC0CB' // Pink
+            dx: 0, // Horizontal movement on track
+            dy: 0, // Vertical movement (gravity)
+            offset: 0, // Offset from track center
+            color: '#4682B4' // Blue eskimo suit (placeholder)
         };
 
-        // Rider 2 (Black motorcycle)
-        const rider2 = {
-            x: 750,
-            y: 500,
-            width: 40,
-            height: 80,
-            speed: 5,
-            dx: 0,
-            dy: 0,
-            color: '#000000' // Black
-        };
-
-        // Track
+        // Track settings
         const track = {
-            color: '#FF4040' // Red track
+            color: '#FF4040', // Red icy track
+            speed: 0, // Track movement speed (controlled by player)
+            position: 0 // Current position of track
         };
 
-        // Draw the track
+        // Gravity and physics
+        const gravity = 0.5;
+        const trackWidth = 20; // Width of the track
+
+        // Draw the track (sinusoidal icy path)
         function drawTrack() {
             ctx.strokeStyle = track.color;
-            ctx.lineWidth = 20;
+            ctx.lineWidth = trackWidth;
             ctx.beginPath();
-            for (let x = 0; x < canvas.width; x += 10) {
-                const y = 300 + 100 * Math.sin(x / 100);
+            for (let x = 0; x < canvas.width + 1000; x += 10) { // Extend track for smooth scrolling
+                const trackPos = x - track.position;
+                const y = 300 + 100 * Math.sin(trackPos / 100 * Math.PI);
                 if (x === 0) {
                     ctx.moveTo(x, y);
                 } else {
@@ -69,70 +78,102 @@
             ctx.stroke();
         }
 
-        // Draw a rider
-        function drawRider(rider) {
-            ctx.fillStyle = rider.color;
-            ctx.fillRect(rider.x, rider.y, rider.width, rider.height);
+        // Draw the skater (placeholder - replace with your image)
+        function drawSkater() {
+            // Placeholder for now - replace with your image (skater.png)
+            ctx.fillStyle = skater.color; // Blue eskimo suit
+            ctx.fillRect(skater.x, skater.y, skater.width, skater.height);
+
+            // Gray boots (bottom)
+            ctx.fillStyle = '#808080'; // Gray
+            ctx.fillRect(skater.x + 10, skater.y + skater.height - 20, 20, 20);
+
+            // White hat
+            ctx.fillStyle = '#FFFFFF'; // White
+            ctx.beginPath();
+            ctx.arc(skater.x + skater.width / 2, skater.y + 10, 15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Brown beard
+            ctx.fillStyle = '#8B4513'; // Brown
+            ctx.fillRect(skater.x + 10, skater.y + 30, 20, 10);
         }
 
-        // Controls for riders
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') rider1.dx = -rider1.speed;
-            if (e.key === 'ArrowRight') rider1.dx = rider1.speed;
-            if (e.key === 'ArrowUp') rider1.dy = -rider1.speed;
-            if (e.key === 'ArrowDown') rider1.dy = rider1.speed;
-
-            if (e.key === 'a') rider2.dx = -rider2.speed;
-            if (e.key === 'd') rider2.dx = rider2.speed;
-            if (e.key === 'w') rider2.dy = -rider2.speed;
-            if (e.key === 's') rider2.dy = rider2.speed;
-        });
-
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') rider1.dx = 0;
-            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') rider1.dy = 0;
-
-            if (e.key === 'a' || e.key === 'd') rider2.dx = 0;
-            if (e.key === 'w' || e.key === 's') rider2.dy = 0;
-        });
-
-        // Update rider positions
+        // Update skater and track position
         function update() {
-            rider1.x += rider1.dx;
-            rider1.y += rider1.dy;
+            // Apply gravity
+            skater.dy += gravity;
+            skater.y += skater.dy;
 
-            rider2.x += rider2.dx;
-            rider2.y += rider2.dy;
+            // Calculate track position at skater's x (accounting for scroll)
+            const trackX = skater.x + track.position;
+            const trackY = 300 + 100 * Math.sin(trackX / 100 * Math.PI);
+            const trackAngle = Math.atan2(100 * Math.cos(trackX / 100 * Math.PI), 1); // Angle of the track
 
-            // Keep riders within canvas boundaries
-            if (rider1.x < 0) rider1.x = 0;
-            if (rider1.x + rider1.width > canvas.width) rider1.x = canvas.width - rider1.width;
-            if (rider1.y < 0) rider1.y = 0;
-            if (rider1.y + rider1.height > canvas.height) rider1.y = canvas.height - rider1.height;
+            // Keep skater on track (simple collision)
+            const halfTrackWidth = trackWidth / 2;
+            const skaterHalfWidth = skater.width / 2;
+            if (Math.abs(skater.offset) > halfTrackWidth - skaterHalfWidth) {
+                gameOver();
+                return;
+            }
 
-            if (rider2.x < 0) rider2.x = 0;
-            if (rider2.x + rider2.width > canvas.width) rider2.x = canvas.width - rider2.width;
-            if (rider2.y < 0) rider2.y = 0;
-            if (rider2.y + rider2.height > canvas.height) rider2.y = canvas.height - rider2.height;
+            // Position skater on track
+            skater.y = trackY - skater.height + skater.offset;
+
+            // Move track based on speed (controlled by player)
+            track.position += track.speed;
+            if (track.position > 1000) track.position = 0; // Reset for infinite scrolling
+
+            // Keep skater in middle of screen horizontally
+            skater.x = canvas.width / 2 - skater.width / 2;
+
+            // Apply sliding on ice (reduce speed gradually if not accelerating)
+            if (track.speed > 0 && !keys.ArrowUp) {
+                track.speed *= 0.98; // Slow down naturally on ice
+            }
+            if (track.speed < 0) track.speed = 0; // Prevent negative speed
         }
 
-        // Draw the background
+        // Draw background
         function drawBackground() {
             ctx.fillStyle = '#FFFFFF'; // White snow
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Handle keyboard input
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (e.key === 'ArrowUp') track.speed = 5; // Gas (move track faster)
+            if (e.key === 'ArrowDown') track.speed = 0; // Brake (stop track)
+            if (e.key === 'ArrowLeft') skater.offset -= 2; // Move left on track
+            if (e.key === 'ArrowRight') skater.offset += 2; // Move right on track
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // Game over function
+        function gameOver() {
+            gameOverText.style.display = 'block';
+            // Stop the game loop (optional: you can add a restart button)
+            // For now, just pause the game
+            track.speed = 0;
         }
 
         // Main game loop
         function gameLoop() {
             drawBackground();
             drawTrack();
-            drawRider(rider1);
-            drawRider(rider2);
+            drawSkater();
             update();
             requestAnimationFrame(gameLoop);
         }
 
-        // Start the game
+        // Start the game with skater on track
+        skater.y = 300 - skater.height; // Start on the initial track position
         gameLoop();
     </script>
 </body>
