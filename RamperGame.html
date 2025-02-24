@@ -18,20 +18,30 @@
         canvas {
             border: 1px solid black;
         }
-        #gameOver, #restartButton {
+        #gameOver, #restartButton, #score {
             position: absolute;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            display: block;
+        }
+        #score {
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: black;
+        }
+        #gameOver {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-family: Arial, sans-serif;
-            text-align: center;
-            display: none;
-        }
-        #gameOver {
             font-size: 48px;
             color: red;
+            display: none;
         }
         #restartButton {
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 24px;
             padding: 10px 20px;
             background-color: #4CAF50; /* Green button */
@@ -39,6 +49,7 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            display: none;
         }
         #restartButton:hover {
             background-color: #45a049; /* Darker green on hover */
@@ -47,6 +58,7 @@
 </head>
 <body>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="score">Score: 0</div>
     <div id="gameOver">Game Over</div>
     <button id="restartButton">Restart</button>
 
@@ -55,6 +67,7 @@
         const ctx = canvas.getContext('2d');
         const gameOverText = document.getElementById('gameOver');
         const restartButton = document.getElementById('restartButton');
+        const scoreElement = document.getElementById('score');
 
         // Skater (Ice Harvester) settings
         const skater = {
@@ -72,34 +85,62 @@
 
         // Track settings
         const track = {
-            color: '#FF4040', // Red icy track
-            speed: 0, // Track movement speed (controlled by player)
-            position: 0 // Current position of track
+            color: '#FFFFFF', // White icy track
+            speed: 5, // Start with initial speed for immediate gameplay
+            position: 0, // Current position of track
+            length: 5000 // Long track for extended play
         };
 
         // Gravity and physics
         const gravity = 0.5;
         const trackWidth = 20; // Width of the track
         let gameRunning = true;
+        let score = 0;
+        let lastTime = performance.now();
 
-        // Draw the track (mostly flat with occasional ramps/drops)
+        // Sound effects (add your own MP3 files: wind.mp3, start.mp3, crash.mp3)
+        const windSound = new Audio('wind.mp3');
+        const startSound = new Audio('start.mp3');
+        const crashSound = new Audio('crash.mp3');
+        windSound.loop = true;
+        windSound.volume = 0.3;
+
+        // Draw the track (white icy path with random ramps/drops)
         function drawTrack() {
             ctx.strokeStyle = track.color;
             ctx.lineWidth = trackWidth;
             ctx.beginPath();
-            for (let x = 0; x < canvas.width + 1000; x += 10) { // Extend track for smooth scrolling
+            for (let x = 0; x < canvas.width + track.length; x += 10) { // Extend track for smooth scrolling
                 const trackPos = x - track.position;
-                // Mostly flat, with occasional ramps (sinusoidal with lower amplitude and ramps)
                 let y;
-                if (trackPos % 800 < 200) { // Flat section
-                    y = 300;
-                } else if (trackPos % 800 < 400) { // Ramp up (skate park schans)
-                    y = 300 - 50 * Math.sin((trackPos % 800 - 200) / 200 * Math.PI);
-                } else if (trackPos % 800 < 600) { // Flat section
-                    y = 250;
-                } else { // Drop (afdaling for extra speed)
-                    y = 250 + 50 * Math.sin((trackPos % 800 - 600) / 200 * Math.PI);
+                // Random but manageable variations (mostly flat, occasional ramps/drops)
+                if (Math.random() < 0.02 && trackPos > 100) { // 2% chance of change every 10 pixels, after initial flat
+                    const variation = Math.random() * 2 - 1; // -1 to 1
+                    if (variation > 0.5) { // Ramp up (skate park schans)
+                        y = 300 - 30 * Math.sin((trackPos % 400) / 200 * Math.PI);
+                    } else if (variation < -0.5) { // Drop (afdaling for extra speed)
+                        y = 300 + 30 * Math.sin((trackPos % 400) / 200 * Math.PI);
+                    } else { // Flat
+                        y = 300;
+                    }
+                } else {
+                    y = 300; // Mostly flat
                 }
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // Add icy shine effect
+            ctx.strokeStyle = 'rgba(173, 216, 230, 0.5)'; // Light blue shine
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < canvas.width + track.length; x += 20) {
+                const trackPos = x - track.position;
+                const y = 300 + 5 * Math.sin(trackPos / 50 * Math.PI); // Subtle wave for shine
                 if (x === 0) {
                     ctx.moveTo(x, y);
                 } else {
@@ -109,26 +150,34 @@
             ctx.stroke();
         }
 
-        // Draw the skater (placeholder - replace with your image)
+        // Draw the skater (rounded shape for realistic look)
         function drawSkater() {
-            // Blue eskimo suit (body)
+            // Blue eskimo suit (body) with rounded edges
             ctx.fillStyle = skater.color; // Blue
-            ctx.fillRect(skater.x, skater.y, skater.width, skater.height);
-
-            // White hat
-            ctx.fillStyle = '#FFFFFF'; // White
             ctx.beginPath();
-            ctx.arc(skater.x + skater.width / 2, skater.y + 10, 15, 0, Math.PI * 2);
+            ctx.ellipse(skater.x + skater.width / 2, skater.y + skater.height / 2, skater.width / 2, skater.height / 2, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Brown beard
+            // White hat (rounded)
+            ctx.fillStyle = '#FFFFFF'; // White
+            ctx.beginPath();
+            ctx.ellipse(skater.x + skater.width / 2, skater.y + 20, 15, 15, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Brown beard (rounded)
             ctx.fillStyle = '#8B4513'; // Brown
-            ctx.fillRect(skater.x + 10, skater.y + 30, 20, 10);
+            ctx.beginPath();
+            ctx.ellipse(skater.x + skater.width / 2, skater.y + 50, 10, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
 
             // Gray feet with moving skates
             ctx.fillStyle = '#808080'; // Gray feet
-            ctx.fillRect(skater.x + 5, skater.y + skater.height - 20, 15, 10); // Left foot
-            ctx.fillRect(skater.x + 20, skater.y + skater.height - 20, 15, 10); // Right foot
+            ctx.beginPath();
+            ctx.ellipse(skater.x + 15, skater.y + skater.height - 10, 10, 5, 0, 0, Math.PI * 2); // Left foot
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(skater.x + 25, skater.y + skater.height - 10, 10, 5, 0, 0, Math.PI * 2); // Right foot
+            ctx.fill();
 
             // Moving skate blades (animate when accelerating)
             const bladeLength = 15;
@@ -136,19 +185,25 @@
             ctx.strokeStyle = '#000000'; // Black skates
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(skater.x + 5, skater.y + skater.height - 10);
-            ctx.lineTo(skater.x + 5 + bladeOffset, skater.y + skater.height - 10 + bladeLength);
+            ctx.moveTo(skater.x + 15, skater.y + skater.height - 5);
+            ctx.lineTo(skater.x + 15 + bladeOffset, skater.y + skater.height - 5 + bladeLength);
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.moveTo(skater.x + 20, skater.y + skater.height - 10);
-            ctx.lineTo(skater.x + 20 + bladeOffset, skater.y + skater.height - 10 + bladeLength);
+            ctx.moveTo(skater.x + 25, skater.y + skater.height - 5);
+            ctx.lineTo(skater.x + 25 + bladeOffset, skater.y + skater.height - 5 + bladeLength);
             ctx.stroke();
         }
 
         // Update skater and track position
-        function update() {
+        function update(currentTime) {
             if (!gameRunning) return;
+
+            // Update score (1 point per second)
+            const deltaTime = (currentTime - lastTime) / 1000; // Seconds
+            score += deltaTime;
+            scoreElement.textContent = `Score: ${Math.floor(score)}`;
+            lastTime = currentTime;
 
             // Apply gravity
             skater.dy += gravity;
@@ -156,17 +211,16 @@
 
             // Calculate track position at skater's x (accounting for scroll)
             const trackX = skater.x + track.position;
-            let trackY;
-            if (trackX % 800 < 200) { // Flat section
-                trackY = 300;
-            } else if (trackX % 800 < 400) { // Ramp up
-                trackY = 300 - 50 * Math.sin((trackX % 800 - 200) / 200 * Math.PI);
-            } else if (trackX % 800 < 600) { // Flat section
-                trackY = 250;
-            } else { // Drop
-                trackY = 250 + 50 * Math.sin((trackX % 800 - 600) / 200 * Math.PI);
+            let trackY = 300; // Default flat
+            if (Math.random() < 0.02 && trackX > 100) { // Random variations
+                const variation = Math.random() * 2 - 1;
+                if (variation > 0.5) { // Ramp up
+                    trackY = 300 - 30 * Math.sin((trackX % 400) / 200 * Math.PI);
+                } else if (variation < -0.5) { // Drop
+                    trackY = 300 + 30 * Math.sin((trackX % 400) / 200 * Math.PI);
+                }
             }
-            const trackAngle = Math.atan2(50 * Math.cos(trackX / 200 * Math.PI), 1); // Angle for ramps/drops
+            const trackAngle = Math.atan2(30 * Math.cos(trackX / 200 * Math.PI), 1); // Angle for ramps/drops
 
             // Keep skater on track (simple collision)
             const halfTrackWidth = trackWidth / 2;
@@ -181,7 +235,7 @@
 
             // Move track based on speed (controlled by player)
             track.position += track.speed;
-            if (track.position > 1000) track.position = 0; // Reset for infinite scrolling
+            if (track.position > track.length) track.position = 0; // Reset for infinite scrolling
 
             // Keep skater in middle of screen horizontally
             skater.x = canvas.width / 2 - skater.width / 2;
@@ -250,6 +304,8 @@
             gameRunning = false;
             gameOverText.style.display = 'block';
             restartButton.style.display = 'block';
+            crashSound.play(); // Play crash sound
+            windSound.pause(); // Stop wind sound
         }
 
         // Restart function
@@ -264,21 +320,27 @@
             skater.offset = 0;
             skater.skateAngle = 0;
             track.position = 0;
-            track.speed = 0;
+            track.speed = 5; // Start with initial speed
+            score = 0;
+            scoreElement.textContent = `Score: ${Math.floor(score)}`;
+            windSound.play(); // Restart wind sound
+            startSound.play(); // Play start sound
         });
 
         // Main game loop
-        function gameLoop() {
+        function gameLoop(currentTime) {
             drawBackground();
             drawTrack();
             drawSkater();
-            update();
+            update(currentTime);
             requestAnimationFrame(gameLoop);
         }
 
-        // Start the game with skater on track
+        // Start the game immediately with skater on track
         skater.y = 300 - skater.height; // Start on the flat track
-        gameLoop();
+        windSound.play(); // Start background wind sound
+        startSound.play(); // Play start sound
+        gameLoop(performance.now());
     </script>
 </body>
 </html>
