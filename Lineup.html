@@ -23,8 +23,26 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
-        .input-section, .output-section {
+        .tab {
+            display: none;
+        }
+        .tab.active {
+            display: block;
+        }
+        .tab-buttons {
             margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .tab-btn.active {
+            background-color: #2980b9;
         }
         table {
             width: 100%;
@@ -43,6 +61,13 @@
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+        textarea, select, input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
         button {
             padding: 10px 20px;
             background-color: #2ecc71;
@@ -54,14 +79,6 @@
         }
         button:hover {
             background-color: #27ae60;
-        }
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
         }
         #exportBtn {
             background-color: #e74c3c;
@@ -76,35 +93,63 @@
     <div class="container">
         <h1>Show Line-Up Scheduler</h1>
 
-        <!-- Input Section -->
-        <div class="input-section">
-            <h2>Input Data</h2>
-            <p>Paste your artists, roles, and absences below. Use the format: <br>
-            <strong>Artists:</strong> "ID,Name,Gender,Absent" (e.g., "A1,John,M,No") <br>
-            <strong>Roles:</strong> "RoleID,Name,ActID,PrepTime,DuoRole" (e.g., "R1,Lead Singer,Act1,Yes,R2") <br>
-            <strong>Assignments:</strong> "RoleID,ArtistID" (e.g., "R1,A1")</p>
-            
-            <textarea id="artistsInput" placeholder="Artists (one per line)">A1,John,M,No
-A2,Emma,F,No
-A3,Mike,M,Yes
-A4,Sara,F,No</textarea>
-            
-            <textarea id="rolesInput" placeholder="Roles (one per line)">R1,Lead Singer,Act1,Yes,R2
-R2,Backup Singer,Act1,No,
-R3,Dancer,Act2,No,
-R4,Guitarist,Act2,Yes,</textarea>
-            
-            <textarea id="assignmentsInput" placeholder="Default Assignments (one per line)">R1,A1
-R2,A2
-R3,A3
-R4,A4</textarea>
-            
-            <button onclick="generateLineUp()">Generate Line-Up</button>
+        <!-- Tab Buttons -->
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="openTab('artists')">Artists</button>
+            <button class="tab-btn" onclick="openTab('roles')">Roles</button>
+            <button class="tab-btn" onclick="openTab('conflicts')">Conflicts</button>
+            <button class="tab-btn" onclick="openTab('absences')">Absences</button>
+            <button class="tab-btn" onclick="openTab('competencies')">Competencies</button>
+            <button class="tab-btn" onclick="openTab('lineup')">Line-Up</button>
         </div>
 
-        <!-- Output Section -->
-        <div class="output-section" id="scheduleOutput">
+        <!-- Artists Tab -->
+        <div id="artists" class="tab active">
+            <h2>Artists</h2>
+            <p>Add one artist per line: "Name,Gender" (e.g., "John,M")</p>
+            <textarea id="artistsInput" placeholder="John,M&#10;Emma,F"></textarea>
+            <button onclick="saveData('artists')">Save Artists</button>
+        </div>
+
+        <!-- Roles Tab -->
+        <div id="roles" class="tab">
+            <h2>Roles</h2>
+            <p>Add one role per line: "Name,Act" (e.g., "Lead Singer,Act1")</p>
+            <textarea id="rolesInput" placeholder="Lead Singer,Act1&#10;Backup Singer,Act1"></textarea>
+            <button onclick="saveData('roles')">Save Roles</button>
+        </div>
+
+        <!-- Conflicts Tab -->
+        <div id="conflicts" class="tab">
+            <h2>Conflicts</h2>
+            <p>Select a role and add conflicting roles (one per line).</p>
+            <select id="conflictRole" onchange="loadConflicts()"></select>
+            <textarea id="conflictsInput" placeholder="List conflicting roles (e.g., Backup Singer)"></textarea>
+            <button onclick="saveConflicts()">Save Conflicts</button>
+        </div>
+
+        <!-- Absences Tab -->
+        <div id="absences" class="tab">
+            <h2>Absences</h2>
+            <p>Select artists who are absent for this show.</p>
+            <select id="absencesInput" multiple size="10"></select>
+            <button onclick="saveData('absences')">Save Absences</button>
+        </div>
+
+        <!-- Competencies Tab -->
+        <div id="competencies" class="tab">
+            <h2>Competencies</h2>
+            <p>Select a role, assign an artist, and specify duo partner if applicable.</p>
+            <select id="compRole" onchange="loadCompetency()"></select>
+            <select id="compArtist"></select>
+            <select id="compDuo"><option value="">No Duo</option></select>
+            <button onclick="saveCompetency()">Save Competency</button>
+        </div>
+
+        <!-- Line-Up Tab -->
+        <div id="lineup" class="tab">
             <h2>Generated Line-Up</h2>
+            <button onclick="generateLineUp()">Generate Line-Up</button>
             <table id="lineUpTable">
                 <thead>
                     <tr>
@@ -121,72 +166,175 @@ R4,A4</textarea>
     </div>
 
     <script>
-        function parseInput(text) {
-            return text.trim().split('\n').map(line => line.split(','));
+        // Tab handling
+        function openTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            document.querySelector(`button[onclick="openTab('${tabName}')"]`).classList.add('active');
+            if (tabName === 'conflicts' || tabName === 'competencies' || tabName === 'absences') loadDropdowns();
         }
 
-        function generateLineUp() {
-            // Parse inputs
-            const artists = parseInput(document.getElementById('artistsInput').value);
-            const roles = parseInput(document.getElementById('rolesInput').value);
-            const assignments = parseInput(document.getElementById('assignmentsInput').value);
+        // Load saved data on page load
+        window.onload = function() {
+            loadData('artists', 'artistsInput');
+            loadData('roles', 'rolesInput');
+            loadData('absences', 'absencesInput', true);
+            loadDropdowns();
+        };
 
-            // Create dictionaries
+        // Save data to localStorage
+        function saveData(key) {
+            const input = document.getElementById(`${key}Input`);
+            if (key === 'absences') {
+                const selected = Array.from(input.selectedOptions).map(opt => opt.value);
+                localStorage.setItem(key, JSON.stringify(selected));
+            } else {
+                localStorage.setItem(key, input.value);
+            }
+            loadDropdowns();
+        }
+
+        // Load data from localStorage
+        function loadData(key, inputId, isSelect = false) {
+            const data = localStorage.getItem(key);
+            if (data) {
+                const input = document.getElementById(inputId);
+                if (isSelect) {
+                    const saved = JSON.parse(data);
+                    input.innerHTML = parseInput(localStorage.getItem('artists')).map(([name]) => `<option value="${name}">${name}</option>`).join('');
+                    saved.forEach(val => input.querySelector(`option[value="${val}"]`).selected = true);
+                } else {
+                    input.value = data;
+                }
+            }
+        }
+
+        // Parse input text
+        function parseInput(text) {
+            return text.trim().split('\n').map((line, idx) => [idx + 1, ...line.split(',')]);
+        }
+
+        // Load dropdowns for conflicts, competencies, and absences
+        function loadDropdowns() {
+            const artists = parseInput(localStorage.getItem('artists') || '');
+            const roles = parseInput(localStorage.getItem('roles') || '');
+
+            // Conflicts dropdown
+            const conflictRole = document.getElementById('conflictRole');
+            conflictRole.innerHTML = roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+            loadConflicts();
+
+            // Absences dropdown
+            const absencesInput = document.getElementById('absencesInput');
+            absencesInput.innerHTML = artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+
+            // Competencies dropdowns
+            const compRole = document.getElementById('compRole');
+            const compArtist = document.getElementById('compArtist');
+            const compDuo = document.getElementById('compDuo');
+            compRole.innerHTML = roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+            compArtist.innerHTML = artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+            compDuo.innerHTML = '<option value="">No Duo</option>' + roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+            loadCompetency();
+        }
+
+        // Save and load conflicts
+        function saveConflicts() {
+            const role = document.getElementById('conflictRole').value;
+            const conflicts = document.getElementById('conflictsInput').value.trim().split('\n');
+            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+            allConflicts[role] = conflicts;
+            localStorage.setItem('conflicts', JSON.stringify(allConflicts));
+        }
+
+        function loadConflicts() {
+            const role = document.getElementById('conflictRole').value;
+            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+            document.getElementById('conflictsInput').value = (allConflicts[role] || []).join('\n');
+        }
+
+        // Save and load competencies
+        function saveCompetency() {
+            const role = document.getElementById('compRole').value;
+            const artist = document.getElementById('compArtist').value;
+            const duo = document.getElementById('compDuo').value;
+            const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            allCompetencies[role] = { artist, duo };
+            localStorage.setItem('competencies', JSON.stringify(allCompetencies));
+        }
+
+        function loadCompetency() {
+            const role = document.getElementById('compRole').value;
+            const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const comp = allCompetencies[role] || { artist: '', duo: '' };
+            document.getElementById('compArtist').value = comp.artist || '';
+            document.getElementById('compDuo').value = comp.duo || '';
+        }
+
+        // Generate line-up
+        function generateLineUp() {
+            const artists = parseInput(localStorage.getItem('artists') || '');
+            const roles = parseInput(localStorage.getItem('roles') || '');
+            const absences = JSON.parse(localStorage.getItem('absences') || '[]');
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+
             const artistDict = {};
-            artists.forEach(([id, name, gender, absent]) => {
-                artistDict[id] = { name, gender, absent: absent.trim().toLowerCase() === 'yes' };
+            artists.forEach(([id, name, gender]) => {
+                artistDict[name] = { gender, absent: absences.includes(name) };
             });
 
             const roleDict = {};
-            roles.forEach(([id, name, act, prep, duo]) => {
-                roleDict[id] = { name, act, prep: prep === 'Yes', duo: duo || '' };
+            roles.forEach(([id, name, act]) => {
+                roleDict[name] = { act, conflicts: conflicts[name] || [], ...competencies[name] };
             });
 
-            const assignmentDict = {};
-            assignments.forEach(([roleID, artistID]) => {
-                assignmentDict[roleID] = artistID;
-            });
-
-            // Generate line-up
             const lineUpBody = document.getElementById('lineUpBody');
-            lineUpBody.innerHTML = ''; // Clear previous output
+            lineUpBody.innerHTML = '';
 
-            Object.keys(roleDict).forEach(roleID => {
-                let artistID = assignmentDict[roleID];
+            Object.keys(roleDict).forEach(role => {
+                let artist = roleDict[role].artist;
                 let status = 'OK';
 
-                // Check if artist is absent and reassign if needed
-                if (artistDict[artistID]?.absent) {
-                    // Find a replacement (first available artist)
-                    for (let [id, artist] of Object.entries(artistDict)) {
-                        if (!artist.absent && !Object.values(assignmentDict).includes(id)) {
-                            artistID = id;
+                // Check absence and reassign
+                if (artistDict[artist]?.absent) {
+                    for (let [aName, aData] of Object.entries(artistDict)) {
+                        if (!aData.absent && !Object.values(roleDict).some(r => r.artist === aName && r.act === roleDict[role].act)) {
+                            artist = aName;
                             status = 'Reassigned';
                             break;
                         }
                     }
-                    if (artistDict[artistID]?.absent) status = 'No Replacement Available';
+                    if (artistDict[artist]?.absent) status = 'No Replacement';
                 }
 
-                // Check duo roles
-                if (roleDict[roleID].duo && assignmentDict[roleDict[roleID].duo] !== artistID) {
+                // Check duo consistency
+                if (roleDict[role].duo && roleDict[roleDict[role].duo]?.artist !== artist) {
                     status = 'Duo Conflict';
                 }
 
-                // Add row to table
+                // Check conflicts
+                if (roleDict[role].conflicts.some(conflict => {
+                    return roleDict[conflict]?.artist === artist && roleDict[conflict]?.act === roleDict[role].act;
+                })) {
+                    status = 'Conflict';
+                }
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${roleDict[roleID].name}</td>
-                    <td>${roleDict[roleID].act}</td>
-                    <td>${artistDict[artistID]?.name || 'Unassigned'}</td>
+                    <td>${role}</td>
+                    <td>${roleDict[role].act}</td>
+                    <td>${artist || 'Unassigned'}</td>
                     <td>${status}</td>
                 `;
                 lineUpBody.appendChild(row);
             });
         }
 
+        // Export to PNG
         function exportToPNG() {
-            html2canvas(document.getElementById('scheduleOutput')).then(canvas => {
+            html2canvas(document.getElementById('lineup')).then(canvas => {
                 const link = document.createElement('a');
                 link.download = 'show_lineup.png';
                 link.href = canvas.toDataURL('image/png');
