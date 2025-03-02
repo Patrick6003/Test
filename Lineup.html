@@ -10,6 +10,7 @@
             margin: 20px;
             background-color: #f5f5f5;
             color: #333;
+            transition: all 0.3s;
         }
         h1 {
             text-align: center;
@@ -22,6 +23,7 @@
             background: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
         }
         .tab {
             display: none;
@@ -72,11 +74,13 @@
             border-radius: 5px;
             border: 1px solid #ddd;
             font-size: 16px;
+        }
+        textarea {
             min-height: 150px;
         }
-        select[multiple] {
-            min-height: 200px;
-            width: 100%;
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
         }
         button {
             padding: 12px 24px;
@@ -116,14 +120,32 @@
             gap: 10px;
             margin: 5px 0;
         }
+        .roles-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
         @media (max-width: 600px) {
             .container { padding: 10px; }
             .tab-btn { padding: 10px; font-size: 14px; }
             th, td { padding: 8px; font-size: 14px; }
-            textarea, select, input { font-size: 14px; min-height: 120px; }
-            select[multiple] { min-height: 150px; }
+            textarea, select, input { font-size: 14px; }
             button { padding: 10px; font-size: 14px; }
             .dynamic-entry { flex-direction: column; }
+        }
+        .dark-mode {
+            background-color: #333;
+            color: #fff;
+        }
+        .dark-mode .container {
+            background-color: #444;
+            box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1);
+        }
+        .dark-mode th {
+            background-color: #2980b9;
+        }
+        .dark-mode tr:nth-child(even) {
+            background-color: #555;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -132,6 +154,10 @@
 <body>
     <div class="container">
         <h1>Show Line-Up Scheduler</h1>
+        <select id="darkModeToggle" onchange="toggleDarkMode()">
+            <option value="light">Light Mode</option>
+            <option value="dark">Dark Mode</option>
+        </select>
 
         <!-- Tab Buttons -->
         <div class="tab-buttons">
@@ -148,72 +174,68 @@
         <div id="artists" class="tab active">
             <h2>Artists</h2>
             <p>Add one artist per line: "Name" (e.g., "John")</p>
-            <textarea id="artistsInput" placeholder="John
-Emma
-Alex"></textarea>
+            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" onchange="saveData('artists')"></textarea>
             <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
-            <button onclick="saveData('artists')">Save Artists</button>
         </div>
 
         <!-- Roles Tab -->
         <div id="roles" class="tab">
             <h2>Roles</h2>
             <p>Add one role per line: "Name,Count" (e.g., "Pirate,2")</p>
-            <textarea id="rolesInput" placeholder="Pirate,2
-Lead Singer,1"></textarea>
+            <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" onchange="saveData('roles')"></textarea>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
-            <button onclick="saveData('roles')">Save Roles</button>
         </div>
 
         <!-- Competencies Tab -->
         <div id="competencies" class="tab">
             <h2>Competencies</h2>
-            <p>Set competencies for each artist.</p>
+            <p>Set standard and competency roles for each artist.</p>
             <table id="competenciesTable">
                 <thead>
                     <tr>
                         <th>Artist</th>
-                        <th>Standard Roles<select id="deselectStandard" onchange="deselectAll('standardRoles')"> <option value="keep">Keep</option><option value="deselect">Deselect All</option></select></th>
-                        <th>Competency Roles<select id="deselectCompetency" onchange="deselectAll('competencyRoles')"> <option value="keep">Keep</option><option value="deselect">Deselect All</option></select></th>
+                        <th>Standard Roles</th>
+                        <th>Competency Roles</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
-            <button onclick="saveCompetencies()">Save Competencies</button>
         </div>
 
         <!-- Conflicts Tab -->
         <div id="conflicts" class="tab">
             <h2>Conflicts</h2>
-            <p>Set conflicts for each role.</p>
+            <p>Set conflicting roles for each role.</p>
             <table id="conflictsTable">
                 <thead>
                     <tr>
                         <th>Role</th>
-                        <th>Conflicting Roles<select id="deselectConflicts" onchange="deselectAll('conflictRoles')"> <option value="keep">Keep</option><option value="deselect">Deselect All</option></select></th>
+                        <th>Conflicting Roles</th>
                         <th>Selected Conflicts</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
-            <button onclick="saveConflicts()">Save Conflicts</button>
         </div>
 
         <!-- Absences Tab -->
         <div id="absences" class="tab">
             <h2>Absences & Overrides</h2>
+            <div id="errorMessages" class="error"></div>
+            <p>Date of Show:</p>
+            <input type="date" id="showDate" onchange="updateAbsences()">
             <p>Select absent artists:</p>
             <div id="absentArtistsContainer"></div>
             <p>Overrides (artist takes over a specific role from another artist):</p>
             <div id="overridesList"></div>
             <button onclick="addOverride()">Add Override</button>
-            <button onclick="saveAbsences()">Save Absences & Overrides</button>
+            <button onclick="resetAbsences()">Reset Absences</button>
         </div>
 
         <!-- Line-Up Tab -->
         <div id="lineup" class="tab">
             <h2>Generated Line-Up</h2>
-            <button onclick="generateLineUp()">Generate Line-Up</button>
+            <p id="lineUpDate"></p>
             <table id="lineUpTable">
                 <thead>
                     <tr>
@@ -224,7 +246,6 @@ Lead Singer,1"></textarea>
                 </thead>
                 <tbody id="lineUpBody"></tbody>
             </table>
-            <div id="errorMessages" class="error"></div>
             <button onclick="exportToPNG()">Export to PNG</button>
         </div>
 
@@ -251,6 +272,7 @@ Lead Singer,1"></textarea>
             document.getElementById(tabName).classList.add('active');
             document.querySelector(`button[onclick="openTab('${tabName}')"]`).classList.add('active');
             if (['competencies', 'conflicts', 'absences'].includes(tabName)) loadDropdowns();
+            if (tabName === 'lineup') generateLineUp();
             if (tabName === 'dashboard') generateDashboard();
         }
 
@@ -259,6 +281,9 @@ Lead Singer,1"></textarea>
             loadData('artists', 'artistsInput');
             loadData('roles', 'rolesInput');
             loadDropdowns();
+            const darkMode = localStorage.getItem('darkMode') || 'light';
+            document.getElementById('darkModeToggle').value = darkMode;
+            if (darkMode === 'dark') document.body.classList.add('dark-mode');
         };
 
         // Save data to localStorage
@@ -309,8 +334,18 @@ Lead Singer,1"></textarea>
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${name}</td>
-                    <td><select multiple class="standardRoles" data-artist="${name}">${roles.map(([r]) => `<option value="${r}">${r}</option>`).join('')}</select></td>
-                    <td><select multiple class="competencyRoles" data-artist="${name}">${roles.map(([r]) => `<option value="${r}">${r}</option>`).join('')}</select></td>
+                    <td class="roles-container">${roles.map(([r]) => `
+                        <div class="checkbox-container">
+                            <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="saveCompetencies()">
+                            <label>${r}</label>
+                        </div>
+                    `).join('')}</td>
+                    <td class="roles-container">${roles.map(([r]) => `
+                        <div class="checkbox-container">
+                            <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="saveCompetencies()">
+                            <label>${r}</label>
+                        </div>
+                    `).join('')}</td>
                 `;
                 compTableBody.appendChild(row);
             });
@@ -323,16 +358,15 @@ Lead Singer,1"></textarea>
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${name}</td>
-                    <td><select multiple class="conflictRoles" data-role="${name}">${roles.map(([r]) => `<option value="${r}">${r}</option>`).join('')}</select></td>
+                    <td class="roles-container">${roles.map(([r]) => `
+                        <div class="checkbox-container">
+                            <input type="checkbox" class="conflictRoles" data-role="${name}" value="${r}" onchange="saveConflicts()">
+                            <label>${r}</label>
+                        </div>
+                    `).join('')}</td>
                     <td class="selectedConflicts" data-role="${name}"></td>
                 `;
                 conflictsTableBody.appendChild(row);
-            });
-            document.querySelectorAll('.conflictRoles').forEach(select => {
-                select.onchange = function() {
-                    const selected = Array.from(this.selectedOptions).map(opt => opt.value);
-                    document.querySelector(`.selectedConflicts[data-role="${this.dataset.role}"]`).textContent = selected.join(', ');
-                };
             });
             loadConflicts();
 
@@ -340,21 +374,13 @@ Lead Singer,1"></textarea>
             const absentContainer = document.getElementById('absentArtistsContainer');
             absentContainer.innerHTML = artists.map(([name]) => `
                 <div class="checkbox-container">
-                    <input type="checkbox" class="absentArtist" value="${name}">
+                    <input type="checkbox" class="absentArtist" value="${name}" onchange="updateAbsences()">
                     <label>${name}</label>
                 </div>
             `).join('');
+            const showDate = document.getElementById('showDate');
+            showDate.value = localStorage.getItem('showDate') || new Date().toISOString().split('T')[0];
             loadAbsences();
-        }
-
-        // Deselect all options in a select element
-        function deselectAll(className) {
-            const selects = document.querySelectorAll(`.${className}`);
-            if (document.getElementById(`deselect${className.charAt(0).toUpperCase() + className.slice(1)}`).value === 'deselect') {
-                selects.forEach(select => {
-                    Array.from(select.options).forEach(option => option.selected = false);
-                });
-            }
         }
 
         // Save and load competencies
@@ -362,8 +388,8 @@ Lead Singer,1"></textarea>
             const allCompetencies = {};
             document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
                 const artist = row.querySelector('.standardRoles').dataset.artist;
-                const standardRoles = Array.from(row.querySelector('.standardRoles').selectedOptions).map(opt => opt.value);
-                const competencyRoles = Array.from(row.querySelector('.competencyRoles').selectedOptions).map(opt => opt.value);
+                const standardRoles = Array.from(row.querySelectorAll('.standardRoles:checked')).map(cb => cb.value);
+                const competencyRoles = Array.from(row.querySelectorAll('.competencyRoles:checked')).map(cb => cb.value);
                 allCompetencies[artist] = { standardRoles, competencyRoles };
             });
             localStorage.setItem('competencies', JSON.stringify(allCompetencies));
@@ -374,8 +400,8 @@ Lead Singer,1"></textarea>
             document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
                 const artist = row.querySelector('.standardRoles').dataset.artist;
                 const comp = allCompetencies[artist] || { standardRoles: [], competencyRoles: [] };
-                Array.from(row.querySelector('.standardRoles').options).forEach(opt => opt.selected = comp.standardRoles.includes(opt.value));
-                Array.from(row.querySelector('.competencyRoles').options).forEach(opt => opt.selected = comp.competencyRoles.includes(opt.value));
+                row.querySelectorAll('.standardRoles').forEach(cb => cb.checked = comp.standardRoles.includes(cb.value));
+                row.querySelectorAll('.competencyRoles').forEach(cb => cb.checked = comp.competencyRoles.includes(cb.value));
             });
         }
 
@@ -384,8 +410,9 @@ Lead Singer,1"></textarea>
             const allConflicts = {};
             document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
                 const role = row.querySelector('.conflictRoles').dataset.role;
-                const conflicts = Array.from(row.querySelector('.conflictRoles').selectedOptions).map(opt => opt.value);
-                allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role]; // Add self-conflict
+                const conflicts = Array.from(row.querySelectorAll('.conflictRoles:checked')).map(cb => cb.value);
+                allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role]; // Self-conflict
+                row.querySelector('.selectedConflicts').textContent = allConflicts[role].join(', ');
             });
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
         }
@@ -394,8 +421,8 @@ Lead Singer,1"></textarea>
             const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
                 const role = row.querySelector('.conflictRoles').dataset.role;
-                const conflicts = allConflicts[role] || [role]; // Default to self-conflict
-                Array.from(row.querySelector('.conflictRoles').options).forEach(opt => opt.selected = conflicts.includes(opt.value));
+                const conflicts = allConflicts[role] || [role];
+                row.querySelectorAll('.conflictRoles').forEach(cb => cb.checked = conflicts.includes(cb.value));
                 row.querySelector('.selectedConflicts').textContent = conflicts.join(', ');
             });
         }
@@ -407,23 +434,26 @@ Lead Singer,1"></textarea>
             const div = document.createElement('div');
             div.className = 'dynamic-entry';
             div.innerHTML = `
-                <select class="overrideArtist">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <select class="overrideRole">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <select class="overrideSource">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <button class="remove-btn" onclick="this.parentElement.remove()">Remove</button>
+                <select class="overrideArtist" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="overrideRole" onchange="updateAbsences()">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="overrideSource" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <button class="remove-btn" onclick="this.parentElement.remove(); updateAbsences()">Remove</button>
             `;
             document.getElementById('overridesList').appendChild(div);
         }
 
         // Save and load absences
-        function saveAbsences() {
+        function updateAbsences() {
             const absent = Array.from(document.querySelectorAll('.absentArtist:checked')).map(cb => cb.value);
             const overrides = Array.from(document.querySelectorAll('#overridesList .dynamic-entry')).map(entry => ({
                 artist: entry.querySelector('.overrideArtist').value,
                 role: entry.querySelector('.overrideRole').value,
                 source: entry.querySelector('.overrideSource').value
             }));
+            const showDate = document.getElementById('showDate').value;
             localStorage.setItem('absences', JSON.stringify({ absent, overrides }));
+            localStorage.setItem('showDate', showDate);
+            generateLineUp(); // Auto-generate after update
         }
 
         function loadAbsences() {
@@ -437,6 +467,13 @@ Lead Singer,1"></textarea>
                 last.querySelector('.overrideRole').value = role;
                 last.querySelector('.overrideSource').value = source;
             });
+        }
+
+        function resetAbsences() {
+            document.querySelectorAll('.absentArtist').forEach(cb => cb.checked = false);
+            document.getElementById('overridesList').innerHTML = '';
+            document.getElementById('showDate').value = new Date().toISOString().split('T')[0];
+            updateAbsences();
         }
 
         // Generate line-up
@@ -472,14 +509,14 @@ Lead Singer,1"></textarea>
             absences.overrides?.forEach(({ artist, role, source }) => {
                 if (!artistDict[artist].absent && roleDict[role] && !artistDict[artist].assignedRoles.includes(role)) {
                     const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
-                    if (canAssign) {
+                    if (canAssign && roleDict[role].assignments.length < roleDict[role].qty) {
                         roleDict[role].assignments.push({ artist, status: `Override from ${source}` });
                         artistDict[artist].assignedRoles.push(role);
                         if (source !== artist && artistDict[source].standardRoles.includes(role)) {
                             artistDict[source].standardRoles = artistDict[source].standardRoles.filter(r => r !== role);
                         }
                     } else {
-                        errorMessages.innerHTML += `<p>Override conflict: ${artist} cannot take ${role} due to conflicts.</p>`;
+                        errorMessages.innerHTML += `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
                     }
                 }
             });
@@ -545,6 +582,8 @@ Lead Singer,1"></textarea>
             });
 
             // Display line-up
+            const showDate = document.getElementById('showDate').value;
+            document.getElementById('lineUpDate').textContent = `Show Date: ${showDate}`;
             Object.keys(roleDict).forEach(role => {
                 roleDict[role].assignments.forEach(({ artist, status }) => {
                     lineUpBody.innerHTML += `<tr><td>${role}</td><td>${artist}</td><td>${status}</td></tr>`;
@@ -573,25 +612,28 @@ Lead Singer,1"></textarea>
             const dashboardBody = document.getElementById('dashboardBody');
             dashboardBody.innerHTML = '';
 
-            // Total artists
             dashboardBody.innerHTML += `<tr><td>Total Artists</td><td>${artists.length}</td></tr>`;
 
-            // Total roles filled
             let filledRoles = 0;
-            generateLineUp(); // Ensure latest line-up
+            generateLineUp();
             document.querySelectorAll('#lineUpBody tr').forEach(() => filledRoles++);
             dashboardBody.innerHTML += `<tr><td>Total Roles Filled</td><td>${filledRoles}</td></tr>`;
 
-            // Total conflicts
             const conflictCount = Object.values(conflicts).reduce((acc, conf) => acc + conf.length, 0);
             dashboardBody.innerHTML += `<tr><td>Total Conflicts Defined</td><td>${conflictCount}</td></tr>`;
 
-            // Load overview
             const loadOverview = {};
             Object.keys(artistDict).forEach(artist => {
                 loadOverview[artist] = artistDict[artist].assignedRoles.length;
             });
             dashboardBody.innerHTML += `<tr><td>Load Overview</td><td>${JSON.stringify(loadOverview)}</td></tr>`;
+        }
+
+        // Toggle dark mode
+        function toggleDarkMode() {
+            const mode = document.getElementById('darkModeToggle').value;
+            document.body.classList.toggle('dark-mode', mode === 'dark');
+            localStorage.setItem('darkMode', mode);
         }
 
         // Global artistDict for dashboard access
