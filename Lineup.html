@@ -10,6 +10,7 @@
             margin: 20px;
             background-color: #f5f5f5;
             color: #333;
+            transition: all 0.3s;
         }
         h1 {
             text-align: center;
@@ -22,13 +23,10 @@
             background: white;
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
         }
-        .tab {
-            display: none;
-        }
-        .tab.active {
-            display: block;
-        }
+        .tab { display: none; }
+        .tab.active { display: block; }
         .tab-buttons {
             margin-bottom: 20px;
             display: flex;
@@ -45,9 +43,7 @@
             flex: 1;
             min-width: 100px;
         }
-        .tab-btn.active {
-            background-color: #2980b9;
-        }
+        .tab-btn.active { background-color: #2980b9; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -61,10 +57,12 @@
         th {
             background-color: #3498db;
             color: white;
+            cursor: pointer;
         }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr.ok { background-color: #d4edda; }
+        tr.reassigned { background-color: #fff3cd; }
+        tr.conflict { background-color: #f8d7da; }
         textarea, select, input {
             width: 100%;
             padding: 12px;
@@ -74,9 +72,7 @@
             font-size: 16px;
             min-height: 150px;
         }
-        select[multiple] {
-            min-height: 200px;
-        }
+        select[multiple] { min-height: 200px; }
         button {
             padding: 12px 24px;
             background-color: #2ecc71;
@@ -88,15 +84,15 @@
             width: 100%;
             font-size: 16px;
         }
-        button:hover {
-            background-color: #27ae60;
-        }
-        #exportBtn {
-            background-color: #e74c3c;
-        }
-        #exportBtn:hover {
-            background-color: #c0392b;
-        }
+        button:hover { background-color: #27ae60; }
+        #exportBtn { background-color: #e74c3c; }
+        #exportBtn:hover { background-color: #c0392b; }
+        #csvBtn { background-color: #f39c12; }
+        #csvBtn:hover { background-color: #e67e22; }
+        #darkModeToggle { background-color: #8e44ad; }
+        #darkModeToggle:hover { background-color: #6c3483; }
+        .error { color: red; margin: 10px 0; }
+        .dynamic-entry { display: flex; gap: 10px; margin: 10px 0; }
         @media (max-width: 600px) {
             .container { padding: 10px; }
             .tab-btn { padding: 10px; font-size: 14px; }
@@ -104,19 +100,30 @@
             textarea, select, input { font-size: 14px; min-height: 120px; }
             select[multiple] { min-height: 150px; }
             button { padding: 10px; font-size: 14px; }
+            .dynamic-entry { flex-direction: column; }
+        }
+        @media print {
+            .container { box-shadow: none; }
+            #lineup::before { content: "Show Line-Up - Date: " attr(data-date); display: block; font-size: 16pt; margin-bottom: 20px; }
+            table { font-size: 12pt; }
+            .tab-buttons, button, input { display: none; }
         }
         #lineup { page-break-inside: avoid; }
-        #lineUpTable, #deviationsTable {
-            width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-        }
+        #lineUpTable, #deviationsTable { width: 100%; max-width: 210mm; margin: 0 auto; }
+        .dark-mode { background-color: #333; color: #fff; }
+        .dark-mode .container { background-color: #444; box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1); }
+        .dark-mode th { background-color: #2980b9; }
+        .dark-mode tr:nth-child(even) { background-color: #555; }
+        .dark-mode tr.ok { background-color: #2e7d32; }
+        .dark-mode tr.reassigned { background-color: #f1c40f; }
+        .dark-mode tr.conflict { background-color: #c0392b; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>Show Line-Up Scheduler</h1>
+        <button id="darkModeToggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
 
         <!-- Tab Buttons -->
         <div class="tab-buttons">
@@ -134,6 +141,7 @@
             <p>Add one artist per line: "Name,Gender" (e.g., "John,M")</p>
             <textarea id="artistsInput" placeholder="John,M
 Emma,F"></textarea>
+            <div id="artistsError" class="error"></div>
             <button onclick="saveData('artists')">Save Artists</button>
         </div>
 
@@ -143,6 +151,7 @@ Emma,F"></textarea>
             <p>Add one role per line: "Name,Act" (e.g., "Lead Singer,Act1")</p>
             <textarea id="rolesInput" placeholder="Lead Singer,Act1
 Backup Singer,Act1"></textarea>
+            <div id="rolesError" class="error"></div>
             <button onclick="saveData('roles')">Save Roles</button>
         </div>
 
@@ -160,36 +169,38 @@ Backup Singer,Act1"></textarea>
             <h2>Absences & Specific Assignments</h2>
             <p>Select absent artists:</p>
             <select id="absentArtists" multiple size="10"></select>
-            <p>Override: Select a role and the artist taking it over (optional):</p>
-            <select id="overrideRole"></select>
-            <select id="overrideArtist"></select>
-            <p>Specific Assignment: Assign a non-standard role to an artist (takes priority):</p>
-            <select id="specificRole"></select>
-            <select id="specificArtist"></select>
+            <p>Overrides:</p>
+            <div id="overridesList"></div>
+            <button onclick="addOverride()">Add Override</button>
+            <p>Specific Assignments (Priority):</p>
+            <div id="specificsList"></div>
+            <button onclick="addSpecific()">Add Specific Assignment</button>
             <button onclick="saveAbsences()">Save Absences & Assignments</button>
         </div>
 
         <!-- Competencies Tab -->
         <div id="competencies" class="tab">
             <h2>Competencies</h2>
-            <p>Select an artist and assign multiple roles with duo partners if needed.</p>
+            <p>Select an artist, assign roles, priority, and duo partner if needed.</p>
             <select id="compArtist" onchange="loadCompetency()"></select>
             <select id="compRoles" multiple size="10"></select>
+            <select id="compPriority"><option value="1">1 (Primary)</option><option value="2">2</option><option value="3">3</option></select>
             <select id="compDuo"><option value="">No Duo</option></select>
             <button onclick="saveCompetency()">Save Competency</button>
         </div>
 
         <!-- Line-Up Tab -->
-        <div id="lineup" class="tab">
+        <div id="lineup" class="tab" data-date="March 02, 2025">
             <h2>Generated Line-Up</h2>
+            <input type="text" id="searchInput" placeholder="Search line-up..." onkeyup="filterTable()">
             <button onclick="generateLineUp()">Generate Line-Up</button>
             <table id="lineUpTable">
                 <thead>
                     <tr>
-                        <th>Role</th>
-                        <th>Act</th>
-                        <th>Artist</th>
-                        <th>Status</th>
+                        <th onclick="sortTable(0)">Role</th>
+                        <th onclick="sortTable(1)">Act</th>
+                        <th onclick="sortTable(2)">Artist</th>
+                        <th onclick="sortTable(3)">Status</th>
                     </tr>
                 </thead>
                 <tbody id="lineUpBody"></tbody>
@@ -207,6 +218,7 @@ Backup Singer,Act1"></textarea>
                 <tbody id="deviationsBody"></tbody>
             </table>
             <button id="exportBtn" onclick="exportToPNG()">Export to PNG</button>
+            <button id="csvBtn" onclick="exportToCSV()">Export to CSV</button>
         </div>
     </div>
 
@@ -226,11 +238,19 @@ Backup Singer,Act1"></textarea>
             loadData('roles', 'rolesInput');
             loadAbsences();
             loadDropdowns();
+            if (localStorage.getItem('darkMode') === 'true') toggleDarkMode(true);
         };
 
-        // Save data to localStorage
+        // Save data to localStorage with validation
         function saveData(key) {
             const input = document.getElementById(`${key}Input`);
+            const lines = input.value.trim().split('\n');
+            const errorDiv = document.getElementById(`${key}Error`);
+            errorDiv.textContent = '';
+            if (lines.some(line => line && line.split(',').length !== 2)) {
+                errorDiv.textContent = `Invalid format! Use 'Name,Gender' for artists or 'Name,Act' for roles.`;
+                return;
+            }
             localStorage.setItem(key, input.value);
             loadDropdowns();
         }
@@ -258,15 +278,8 @@ Backup Singer,Act1"></textarea>
 
             // Absences
             const absentArtists = document.getElementById('absentArtists');
-            const overrideRole = document.getElementById('overrideRole');
-            const overrideArtist = document.getElementById('overrideArtist');
-            const specificRole = document.getElementById('specificRole');
-            const specificArtist = document.getElementById('specificArtist');
             absentArtists.innerHTML = artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
-            overrideRole.innerHTML = roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
-            overrideArtist.innerHTML = artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
-            specificRole.innerHTML = roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
-            specificArtist.innerHTML = artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('');
+            loadAbsences();
 
             // Competencies
             const compArtist = document.getElementById('compArtist');
@@ -293,18 +306,43 @@ Backup Singer,Act1"></textarea>
             document.getElementById('conflictsInput').value = (allConflicts[role] || []).join('\n');
         }
 
+        // Add override/specific
+        function addOverride() {
+            const roles = parseInput(localStorage.getItem('roles') || '');
+            const artists = parseInput(localStorage.getItem('artists') || '');
+            const div = document.createElement('div');
+            div.className = 'dynamic-entry';
+            div.innerHTML = `
+                <select class="overrideRole">${roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="overrideArtist">${artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+            `;
+            document.getElementById('overridesList').appendChild(div);
+        }
+
+        function addSpecific() {
+            const roles = parseInput(localStorage.getItem('roles') || '');
+            const artists = parseInput(localStorage.getItem('artists') || '');
+            const div = document.createElement('div');
+            div.className = 'dynamic-entry';
+            div.innerHTML = `
+                <select class="specificRole">${roles.map(([id, name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="specificArtist">${artists.map(([id, name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+            `;
+            document.getElementById('specificsList').appendChild(div);
+        }
+
         // Save and load absences
         function saveAbsences() {
             const absent = Array.from(document.getElementById('absentArtists').selectedOptions).map(opt => opt.value);
-            const overrideRole = document.getElementById('overrideRole').value;
-            const overrideArtist = document.getElementById('overrideArtist').value;
-            const specificRole = document.getElementById('specificRole').value;
-            const specificArtist = document.getElementById('specificArtist').value;
-            const absences = {
-                absent,
-                overrides: overrideRole ? [{ role: overrideRole, artist: overrideArtist }] : [],
-                specifics: specificRole ? [{ role: specificRole, artist: specificArtist }] : []
-            };
+            const overrides = Array.from(document.querySelectorAll('#overridesList .dynamic-entry')).map(entry => ({
+                role: entry.querySelector('.overrideRole').value,
+                artist: entry.querySelector('.overrideArtist').value
+            }));
+            const specifics = Array.from(document.querySelectorAll('#specificsList .dynamic-entry')).map(entry => ({
+                role: entry.querySelector('.specificRole').value,
+                artist: entry.querySelector('.specificArtist').value
+            }));
+            const absences = { absent, overrides, specifics };
             localStorage.setItem('absences', JSON.stringify(absences));
         }
 
@@ -314,14 +352,20 @@ Backup Singer,Act1"></textarea>
                 const absentArtists = document.getElementById('absentArtists');
                 data.absent.forEach(val => absentArtists.querySelector(`option[value="${val}"]`).selected = true);
             }
-            if (data.overrides?.[0]) {
-                document.getElementById('overrideRole').value = data.overrides[0].role;
-                document.getElementById('overrideArtist').value = data.overrides[0].artist;
-            }
-            if (data.specifics?.[0]) {
-                document.getElementById('specificRole').value = data.specifics[0].role;
-                document.getElementById('specificArtist').value = data.specifics[0].artist;
-            }
+            document.getElementById('overridesList').innerHTML = '';
+            data.overrides?.forEach(({ role, artist }) => {
+                addOverride();
+                const last = document.querySelector('#overridesList .dynamic-entry:last-child');
+                last.querySelector('.overrideRole').value = role;
+                last.querySelector('.overrideArtist').value = artist;
+            });
+            document.getElementById('specificsList').innerHTML = '';
+            data.specifics?.forEach(({ role, artist }) => {
+                addSpecific();
+                const last = document.querySelector('#specificsList .dynamic-entry:last-child');
+                last.querySelector('.specificRole').value = role;
+                last.querySelector('.specificArtist').value = artist;
+            });
         }
 
         // Save and load competencies
@@ -329,9 +373,10 @@ Backup Singer,Act1"></textarea>
             const artist = document.getElementById('compArtist').value;
             const roles = Array.from(document.getElementById('compRoles').selectedOptions).map(opt => opt.value);
             const duo = document.getElementById('compDuo').value;
+            const priority = document.getElementById('compPriority').value;
             const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
             roles.forEach(role => {
-                allCompetencies[role] = { artist, duo: duo || '' };
+                allCompetencies[role] = { artist, duo: duo || '', priority: parseInt(priority) };
             });
             localStorage.setItem('competencies', JSON.stringify(allCompetencies));
         }
@@ -345,9 +390,10 @@ Backup Singer,Act1"></textarea>
             });
             const firstRole = Object.keys(allCompetencies).find(r => allCompetencies[r].artist === artist);
             document.getElementById('compDuo').value = allCompetencies[firstRole]?.duo || '';
+            document.getElementById('compPriority').value = allCompetencies[firstRole]?.priority || 1;
         }
 
-        // Generate line-up
+        // Generate line-up with conflict resolution
         function generateLineUp() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
@@ -391,29 +437,31 @@ Backup Singer,Act1"></textarea>
             lineUpBody.innerHTML = '';
             deviationsBody.innerHTML = '';
 
+            // Try initial assignment and resolve conflicts
             Object.keys(roleDict).forEach(role => {
                 let artist = roleDict[role].artist;
                 let status = 'OK';
 
-                // Handle absence
                 if (artistDict[artist]?.absent && !absences.specifics?.some(s => s.role === role && s.artist === artist)) {
                     artist = findReplacement(role, artistDict, roleDict);
                     status = artist ? 'Reassigned (Absent)' : 'No Replacement';
                 }
 
-                // Check duo consistency
                 if (roleDict[role].duo && roleDict[roleDict[role].duo]?.artist !== artist) {
                     artist = findReplacement(role, artistDict, roleDict, roleDict[role].duo);
                     status = artist ? 'Reassigned (Duo)' : 'Duo Conflict';
                 }
 
-                // Check conflicts
                 if (roleDict[role].conflicts.some(conflict => roleDict[conflict]?.artist === artist)) {
                     artist = findReplacement(role, artistDict, roleDict);
                     status = artist ? 'Reassigned (Conflict)' : 'Conflict Unresolved';
                 }
 
-                // Update role assignment
+                if (!artist) {
+                    artist = resolveConflict(role, artistDict, roleDict);
+                    status = artist ? 'Reassigned (Resolved)' : 'Conflict Unresolved';
+                }
+
                 if (artist && artist !== roleDict[role].artist) {
                     const oldArtist = roleDict[role].artist;
                     roleDict[role].artist = artist;
@@ -421,8 +469,8 @@ Backup Singer,Act1"></textarea>
                     if (oldArtist) artistDict[oldArtist].roles = artistDict[oldArtist].roles.filter(r => r !== role);
                 }
 
-                // Line-up row
                 const row = document.createElement('tr');
+                row.className = status.toLowerCase().replace(/ /g, '-');
                 row.innerHTML = `
                     <td>${role}</td>
                     <td>${roleDict[role].act}</td>
@@ -431,7 +479,6 @@ Backup Singer,Act1"></textarea>
                 `;
                 lineUpBody.appendChild(row);
 
-                // Deviations row
                 const stdArtist = competencies[role]?.artist;
                 if (artist !== stdArtist) {
                     const devRow = document.createElement('tr');
@@ -447,17 +494,53 @@ Backup Singer,Act1"></textarea>
         }
 
         function findReplacement(role, artistDict, roleDict, duoRequirement = null) {
-            for (let [aName, aData] of Object.entries(artistDict)) {
-                if (!aData.absent && !roleDict[role].conflicts.includes(aName) &&
-                    (!duoRequirement || roleDict[duoRequirement]?.artist === aName)) {
-                    const canTakeRole = !Object.values(roleDict).some(r => r.artist === aName && r.act === roleDict[role].act && r !== role);
-                    if (canTakeRole) return aName;
+            const candidates = Object.entries(artistDict).filter(([aName, aData]) =>
+                !aData.absent && !roleDict[role].conflicts.includes(aName) &&
+                (!duoRequirement || roleDict[duoRequirement]?.artist === aName)
+            );
+            candidates.sort((a, b) => (roleDict[role].priority?.[a[0]] || 3) - (roleDict[role].priority?.[b[0]] || 3));
+            for (let [aName] of candidates) {
+                if (!Object.values(roleDict).some(r => r.artist === aName && r.act === roleDict[role].act && r !== role)) {
+                    return aName;
                 }
             }
             return null;
         }
 
-        // Export to PNG
+        function resolveConflict(role, artistDict, roleDict) {
+            for (let conflictRole of roleDict[role].conflicts) {
+                if (roleDict[conflictRole].artist === roleDict[role].artist) {
+                    const newArtist = findReplacement(conflictRole, artistDict, roleDict);
+                    if (newArtist) {
+                        const oldArtist = roleDict[conflictRole].artist;
+                        roleDict[conflictRole].artist = newArtist;
+                        artistDict[newArtist].roles.push(conflictRole);
+                        artistDict[oldArtist].roles = artistDict[oldArtist].roles.filter(r => r !== conflictRole);
+                        return roleDict[role].artist;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Sort table
+        function sortTable(column) {
+            const tbody = document.getElementById('lineUpBody');
+            Array.from(tbody.rows).sort((a, b) => a.cells[column].textContent.localeCompare(b.cells[column].textContent))
+                .forEach(row => tbody.appendChild(row));
+        }
+
+        // Filter table
+        function filterTable() {
+            const filter = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.getElementById('lineUpBody').rows;
+            for (let row of rows) {
+                const text = Array.from(row.cells).map(cell => cell.textContent.toLowerCase()).join(' ');
+                row.style.display = text.includes(filter) ? '' : 'none';
+            }
+        }
+
+        // Export functions
         function exportToPNG() {
             html2canvas(document.getElementById('lineup')).then(canvas => {
                 const link = document.createElement('a');
@@ -465,6 +548,22 @@ Backup Singer,Act1"></textarea>
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             });
+        }
+
+        function exportToCSV() {
+            const rows = Array.from(document.querySelectorAll('#lineUpTable tr')).map(row =>
+                Array.from(row.cells).map(cell => `"${cell.textContent}"`).join(',')
+            ).join('\n');
+            const link = document.createElement('a');
+            link.href = 'data:text/csv;charset=utf-8,' + encodeURI(rows);
+            link.download = 'show_lineup.csv';
+            link.click();
+        }
+
+        // Dark mode
+        function toggleDarkMode(force = null) {
+            document.body.classList.toggle('dark-mode', force !== null ? force : undefined);
+            localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
         }
     </script>
 </body>
