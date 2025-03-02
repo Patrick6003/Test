@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Show Line-Up Scheduler</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .input-section, .output-section {
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #27ae60;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        #exportBtn {
+            background-color: #e74c3c;
+        }
+        #exportBtn:hover {
+            background-color: #c0392b;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Show Line-Up Scheduler</h1>
+
+        <!-- Input Section -->
+        <div class="input-section">
+            <h2>Input Data</h2>
+            <p>Paste your artists, roles, and absences below. Use the format: <br>
+            <strong>Artists:</strong> "ID,Name,Gender,Absent" (e.g., "A1,John,M,No") <br>
+            <strong>Roles:</strong> "RoleID,Name,ActID,PrepTime,DuoRole" (e.g., "R1,Lead Singer,Act1,Yes,R2") <br>
+            <strong>Assignments:</strong> "RoleID,ArtistID" (e.g., "R1,A1")</p>
+            
+            <textarea id="artistsInput" placeholder="Artists (one per line)">A1,John,M,No
+A2,Emma,F,No
+A3,Mike,M,Yes
+A4,Sara,F,No</textarea>
+            
+            <textarea id="rolesInput" placeholder="Roles (one per line)">R1,Lead Singer,Act1,Yes,R2
+R2,Backup Singer,Act1,No,
+R3,Dancer,Act2,No,
+R4,Guitarist,Act2,Yes,</textarea>
+            
+            <textarea id="assignmentsInput" placeholder="Default Assignments (one per line)">R1,A1
+R2,A2
+R3,A3
+R4,A4</textarea>
+            
+            <button onclick="generateLineUp()">Generate Line-Up</button>
+        </div>
+
+        <!-- Output Section -->
+        <div class="output-section" id="scheduleOutput">
+            <h2>Generated Line-Up</h2>
+            <table id="lineUpTable">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Act</th>
+                        <th>Artist</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="lineUpBody"></tbody>
+            </table>
+            <button id="exportBtn" onclick="exportToPNG()">Export to PNG</button>
+        </div>
+    </div>
+
+    <script>
+        function parseInput(text) {
+            return text.trim().split('\n').map(line => line.split(','));
+        }
+
+        function generateLineUp() {
+            // Parse inputs
+            const artists = parseInput(document.getElementById('artistsInput').value);
+            const roles = parseInput(document.getElementById('rolesInput').value);
+            const assignments = parseInput(document.getElementById('assignmentsInput').value);
+
+            // Create dictionaries
+            const artistDict = {};
+            artists.forEach(([id, name, gender, absent]) => {
+                artistDict[id] = { name, gender, absent: absent.trim().toLowerCase() === 'yes' };
+            });
+
+            const roleDict = {};
+            roles.forEach(([id, name, act, prep, duo]) => {
+                roleDict[id] = { name, act, prep: prep === 'Yes', duo: duo || '' };
+            });
+
+            const assignmentDict = {};
+            assignments.forEach(([roleID, artistID]) => {
+                assignmentDict[roleID] = artistID;
+            });
+
+            // Generate line-up
+            const lineUpBody = document.getElementById('lineUpBody');
+            lineUpBody.innerHTML = ''; // Clear previous output
+
+            Object.keys(roleDict).forEach(roleID => {
+                let artistID = assignmentDict[roleID];
+                let status = 'OK';
+
+                // Check if artist is absent and reassign if needed
+                if (artistDict[artistID]?.absent) {
+                    // Find a replacement (first available artist)
+                    for (let [id, artist] of Object.entries(artistDict)) {
+                        if (!artist.absent && !Object.values(assignmentDict).includes(id)) {
+                            artistID = id;
+                            status = 'Reassigned';
+                            break;
+                        }
+                    }
+                    if (artistDict[artistID]?.absent) status = 'No Replacement Available';
+                }
+
+                // Check duo roles
+                if (roleDict[roleID].duo && assignmentDict[roleDict[roleID].duo] !== artistID) {
+                    status = 'Duo Conflict';
+                }
+
+                // Add row to table
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${roleDict[roleID].name}</td>
+                    <td>${roleDict[roleID].act}</td>
+                    <td>${artistDict[artistID]?.name || 'Unassigned'}</td>
+                    <td>${status}</td>
+                `;
+                lineUpBody.appendChild(row);
+            });
+        }
+
+        function exportToPNG() {
+            html2canvas(document.getElementById('scheduleOutput')).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'show_lineup.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>
