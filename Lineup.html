@@ -125,6 +125,10 @@
             flex-wrap: wrap;
             gap: 15px;
         }
+        canvas {
+            max-width: 100%;
+            margin: 20px 0;
+        }
         @media (max-width: 600px) {
             .container { padding: 10px; }
             .tab-btn { padding: 10px; font-size: 14px; }
@@ -147,9 +151,15 @@
         .dark-mode tr:nth-child(even) {
             background-color: #555;
         }
+        .dark-mode textarea, .dark-mode select, .dark-mode input {
+            background-color: #555;
+            color: #fff;
+            border-color: #666;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -174,7 +184,8 @@
         <div id="artists" class="tab active">
             <h2>Artists</h2>
             <p>Add one artist per line: "Name" (e.g., "John")</p>
-            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" onchange="saveData('artists')"></textarea>
+            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" onchange="validateAndSave('artists')"></textarea>
+            <div id="artistsError" class="error"></div>
             <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
         </div>
 
@@ -182,7 +193,8 @@
         <div id="roles" class="tab">
             <h2>Roles</h2>
             <p>Add one role per line: "Name,Count" (e.g., "Pirate,2")</p>
-            <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" onchange="saveData('roles')"></textarea>
+            <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" onchange="validateAndSave('roles')"></textarea>
+            <div id="rolesError" class="error"></div>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
         </div>
 
@@ -216,14 +228,17 @@
                 </thead>
                 <tbody></tbody>
             </table>
+            <button onclick="exportConflicts()">Export Conflicts to CSV</button>
+            <input type="file" id="conflictsFile" accept=".csv" onchange="importConflicts()">
         </div>
 
         <!-- Absences Tab -->
         <div id="absences" class="tab">
             <h2>Absences & Overrides</h2>
             <div id="errorMessages" class="error"></div>
-            <p>Date of Show:</p>
+            <p>Show Date and Time:</p>
             <input type="date" id="showDate" onchange="updateAbsences()">
+            <input type="time" id="showTime" onchange="updateAbsences()">
             <p>Select absent artists:</p>
             <div id="absentArtistsContainer"></div>
             <p>Overrides (artist takes over a specific role from another artist):</p>
@@ -235,7 +250,9 @@
         <!-- Line-Up Tab -->
         <div id="lineup" class="tab">
             <h2>Generated Line-Up</h2>
-            <p id="lineUpDate"></p>
+            <div id="lineUpErrors" class="error"></div>
+            <p id="lineUpDateTime"></p>
+            <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
             <table id="lineUpTable">
                 <thead>
                     <tr>
@@ -252,6 +269,8 @@
         <!-- Dashboard Tab -->
         <div id="dashboard" class="tab">
             <h2>Dashboard</h2>
+            <canvas id="rolesChart"></canvas>
+            <canvas id="loadChart"></canvas>
             <table id="dashboardTable">
                 <thead>
                     <tr>
@@ -265,6 +284,8 @@
     </div>
 
     <script>
+        let rolesChart, loadChart;
+
         // Tab handling
         function openTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -293,6 +314,25 @@
             loadDropdowns();
         }
 
+        // Validate and save data
+        function validateAndSave(key) {
+            const input = document.getElementById(`${key}Input`);
+            const errorDiv = document.getElementById(`${key}Error`);
+            errorDiv.innerHTML = '';
+            const lines = parseInput(input.value);
+            const names = lines.map(line => line[0]);
+            const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
+            if (duplicates.length > 0) {
+                errorDiv.innerHTML = `Duplicate ${key}: ${duplicates.join(', ')}`;
+                return;
+            }
+            if (key === 'roles' && lines.some(line => line.length !== 2 || isNaN(parseInt(line[1])))) {
+                errorDiv.innerHTML = 'Invalid format: Use "Name,Count" (e.g., "Pirate,2")';
+                return;
+            }
+            saveData(key);
+        }
+
         // Load data from localStorage
         function loadData(key, inputId) {
             const data = localStorage.getItem(key);
@@ -313,10 +353,44 @@
                     complete: function(results) {
                         const data = results.data.map(row => row.join(',')).join('\n');
                         document.getElementById(`${key}Input`).value = data;
-                        saveData(key);
+                        validateAndSave(key);
                     },
                     error: function() {
                         alert(`Failed to import ${key} CSV`);
+                    }
+                });
+            }
+        }
+
+        // Export conflicts to CSV
+        function exportConflicts() {
+            const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+            const csv = Object.entries(conflicts).map(([role, conf]) => `${role},${conf.join(';')}`).join('\n');
+            const link = document.createElement('a');
+            link.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+            link.download = 'conflicts.csv';
+            link.click();
+        }
+
+        // Import conflicts from CSV
+        function importConflicts() {
+            const fileInput = document.getElementById('conflictsFile');
+            const file = fileInput.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        const allConflicts = {};
+                        results.data.forEach(row => {
+                            if (row.length >= 2) {
+                                const [role, conflicts] = [row[0], row[1].split(';')];
+                                allConflicts[role] = conflicts;
+                            }
+                        });
+                        localStorage.setItem('conflicts', JSON.stringify(allConflicts));
+                        loadConflicts();
+                    },
+                    error: function() {
+                        alert('Failed to import conflicts CSV');
                     }
                 });
             }
@@ -379,7 +453,9 @@
                 </div>
             `).join('');
             const showDate = document.getElementById('showDate');
+            const showTime = document.getElementById('showTime');
             showDate.value = localStorage.getItem('showDate') || new Date().toISOString().split('T')[0];
+            showTime.value = localStorage.getItem('showTime') || '19:00';
             loadAbsences();
         }
 
@@ -411,7 +487,7 @@
             document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
                 const role = row.querySelector('.conflictRoles').dataset.role;
                 const conflicts = Array.from(row.querySelectorAll('.conflictRoles:checked')).map(cb => cb.value);
-                allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role]; // Self-conflict
+                allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role];
                 row.querySelector('.selectedConflicts').textContent = allConflicts[role].join(', ');
             });
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
@@ -451,9 +527,11 @@
                 source: entry.querySelector('.overrideSource').value
             }));
             const showDate = document.getElementById('showDate').value;
+            const showTime = document.getElementById('showTime').value;
             localStorage.setItem('absences', JSON.stringify({ absent, overrides }));
             localStorage.setItem('showDate', showDate);
-            generateLineUp(); // Auto-generate after update
+            localStorage.setItem('showTime', showTime);
+            generateLineUp();
         }
 
         function loadAbsences() {
@@ -473,6 +551,7 @@
             document.querySelectorAll('.absentArtist').forEach(cb => cb.checked = false);
             document.getElementById('overridesList').innerHTML = '';
             document.getElementById('showDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('showTime').value = '19:00';
             updateAbsences();
         }
 
@@ -485,7 +564,7 @@
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
 
             // Initialize data structures
-            const artistDict = {};
+            artistDict = {};
             artists.forEach(([name]) => {
                 artistDict[name] = {
                     absent: absences.absent?.includes(name) || false,
@@ -502,8 +581,10 @@
 
             const lineUpBody = document.getElementById('lineUpBody');
             const errorMessages = document.getElementById('errorMessages');
+            const lineUpErrors = document.getElementById('lineUpErrors');
             lineUpBody.innerHTML = '';
             errorMessages.innerHTML = '';
+            lineUpErrors.innerHTML = '';
 
             // Apply overrides first
             absences.overrides?.forEach(({ artist, role, source }) => {
@@ -516,7 +597,9 @@
                             artistDict[source].standardRoles = artistDict[source].standardRoles.filter(r => r !== role);
                         }
                     } else {
-                        errorMessages.innerHTML += `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
+                        const msg = `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
+                        errorMessages.innerHTML += msg;
+                        lineUpErrors.innerHTML += msg;
                     }
                 }
             });
@@ -552,7 +635,9 @@
                             roleDict[role].assignments.push({ artist: replacement, status: `Replacement for ${absentArtist}` });
                             artistDict[replacement].assignedRoles.push(role);
                         } else {
-                            errorMessages.innerHTML += `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
+                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
+                            errorMessages.innerHTML += msg;
+                            lineUpErrors.innerHTML += msg;
                         }
                     }
                 });
@@ -572,28 +657,45 @@
                         roleDict[role].assignments.push({ artist, status: 'Assigned' });
                         artistDict[artist].assignedRoles.push(role);
                     } else {
-                        errorMessages.innerHTML += `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
+                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
+                        errorMessages.innerHTML += msg;
+                        lineUpErrors.innerHTML += msg;
                         break;
                     }
                 }
                 if (roleDict[role].assignments.length > roleDict[role].qty) {
-                    errorMessages.innerHTML += `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
+                    const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
+                    errorMessages.innerHTML += msg;
+                    lineUpErrors.innerHTML += msg;
                 }
             });
 
             // Display line-up
             const showDate = document.getElementById('showDate').value;
-            document.getElementById('lineUpDate').textContent = `Show Date: ${showDate}`;
+            const showTime = document.getElementById('showTime').value;
+            document.getElementById('lineUpDateTime').textContent = `Show Date: ${showDate} ${showTime}`;
             Object.keys(roleDict).forEach(role => {
                 roleDict[role].assignments.forEach(({ artist, status }) => {
-                    lineUpBody.innerHTML += `<tr><td>${role}</td><td>${artist}</td><td>${status}</td></tr>`;
+                    const row = document.createElement('tr');
+                    row.dataset.status = status;
+                    row.innerHTML = `<td>${role}</td><td>${artist}</td><td>${status}</td>`;
+                    lineUpBody.appendChild(row);
                 });
+            });
+            filterLineUp();
+        }
+
+        // Filter line-up
+        function filterLineUp() {
+            const hideStandard = document.getElementById('hideStandard').checked;
+            document.querySelectorAll('#lineUpBody tr').forEach(row => {
+                row.style.display = hideStandard && row.dataset.status === 'Standard' ? 'none' : '';
             });
         }
 
         // Export to PNG
         function exportToPNG() {
-            html2canvas(document.getElementById('lineup')).then(canvas => {
+            html2canvas(document.getElementById('lineup'), { backgroundColor: document.body.classList.contains('dark-mode') ? '#444' : '#fff' }).then(canvas => {
                 const link = document.createElement('a');
                 link.download = 'show_lineup.png';
                 link.href = canvas.toDataURL('image/png');
@@ -612,21 +714,52 @@
             const dashboardBody = document.getElementById('dashboardBody');
             dashboardBody.innerHTML = '';
 
+            // Total artists
             dashboardBody.innerHTML += `<tr><td>Total Artists</td><td>${artists.length}</td></tr>`;
 
+            // Total roles filled
             let filledRoles = 0;
             generateLineUp();
             document.querySelectorAll('#lineUpBody tr').forEach(() => filledRoles++);
+            const totalRoles = roles.reduce((sum, [, qty]) => sum + parseInt(qty), 0);
             dashboardBody.innerHTML += `<tr><td>Total Roles Filled</td><td>${filledRoles}</td></tr>`;
 
+            // Total conflicts
             const conflictCount = Object.values(conflicts).reduce((acc, conf) => acc + conf.length, 0);
             dashboardBody.innerHTML += `<tr><td>Total Conflicts Defined</td><td>${conflictCount}</td></tr>`;
+
+            // Charts
+            if (rolesChart) rolesChart.destroy();
+            if (loadChart) loadChart.destroy();
+
+            rolesChart = new Chart(document.getElementById('rolesChart'), {
+                type: 'pie',
+                data: {
+                    labels: ['Filled', 'Remaining'],
+                    datasets: [{
+                        data: [filledRoles, totalRoles - filledRoles],
+                        backgroundColor: ['#36A2EB', '#FF6384']
+                    }]
+                },
+                options: { title: { display: true, text: 'Role Allocation' } }
+            });
 
             const loadOverview = {};
             Object.keys(artistDict).forEach(artist => {
                 loadOverview[artist] = artistDict[artist].assignedRoles.length;
             });
-            dashboardBody.innerHTML += `<tr><td>Load Overview</td><td>${JSON.stringify(loadOverview)}</td></tr>`;
+            loadChart = new Chart(document.getElementById('loadChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(loadOverview),
+                    datasets: [{
+                        label: 'Roles Assigned',
+                        data: Object.values(loadOverview),
+                        backgroundColor: '#4BC0C0'
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: true } }, title: { display: true, text: 'Load Overview' } }
+            });
         }
 
         // Toggle dark mode
