@@ -118,6 +118,7 @@
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -131,6 +132,7 @@
             <button class="tab-btn" onclick="openTab('conflicts')">Conflicten</button>
             <button class="tab-btn" onclick="openTab('absences')">Afwezigheden</button>
             <button class="tab-btn" onclick="openTab('lineup')">Line-Up</button>
+            <button class="tab-btn" onclick="openTab('dashboard')">Dashboard</button>
         </div>
 
         <!-- Artists Tab -->
@@ -140,6 +142,7 @@
             <textarea id="artistsInput" placeholder="John
 Emma
 Alex"></textarea>
+            <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
             <button onclick="saveData('artists')">Artiesten Opslaan</button>
         </div>
 
@@ -149,27 +152,41 @@ Alex"></textarea>
             <p>Voeg één rol per regel toe: "Naam,Aantal" (bijv. "Pirate,2")</p>
             <textarea id="rolesInput" placeholder="Pirate,2
 Lead Singer,1"></textarea>
+            <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
             <button onclick="saveData('roles')">Rollen Opslaan</button>
         </div>
 
         <!-- Competencies Tab -->
         <div id="competencies" class="tab">
             <h2>Competenties</h2>
-            <p>Selecteer een artiest en wijs standaardrollen en competenties toe.</p>
-            <select id="compArtist" onchange="loadCompetency()"></select>
-            <p>Standaardrollen:</p>
-            <select id="compStandardRoles" multiple size="10"></select>
-            <p>Competenties (rollen die ze kunnen vervullen):</p>
-            <select id="compCompetencyRoles" multiple size="10"></select>
-            <button onclick="saveCompetency()">Competenties Opslaan</button>
+            <p>Stel competenties in voor elke artiest.</p>
+            <table id="competenciesTable">
+                <thead>
+                    <tr>
+                        <th>Artiest</th>
+                        <th>Standaardrollen</th>
+                        <th>Competenties</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <button onclick="saveCompetencies()">Competenties Opslaan</button>
         </div>
 
         <!-- Conflicts Tab -->
         <div id="conflicts" class="tab">
             <h2>Conflicten</h2>
-            <p>Selecteer een rol en geef conflicterende rollen op.</p>
-            <select id="conflictRole" onchange="loadConflicts()"></select>
-            <textarea id="conflictsInput" placeholder="Lijst met conflicterende rollen (bijv. Backup Singer)"></textarea>
+            <p>Stel conflicten in voor elke rol.</p>
+            <table id="conflictsTable">
+                <thead>
+                    <tr>
+                        <th>Rol</th>
+                        <th>Conflicterende Rollen</th>
+                        <th>Geselecteerde Conflicten</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
             <button onclick="saveConflicts()">Conflicten Opslaan</button>
         </div>
 
@@ -177,8 +194,8 @@ Lead Singer,1"></textarea>
         <div id="absences" class="tab">
             <h2>Afwezigheden & Overrides</h2>
             <p>Selecteer afwezige artiesten:</p>
-            <select id="absentArtists" multiple size="10"></select>
-            <p>Overrides (artiest neemt een specifieke rol over):</p>
+            <div id="absentArtistsContainer"></div>
+            <p>Overrides (artiest neemt een specifieke rol over van een andere artiest):</p>
             <div id="overridesList"></div>
             <button onclick="addOverride()">Override Toevoegen</button>
             <button onclick="saveAbsences()">Afwezigheden & Overrides Opslaan</button>
@@ -198,7 +215,22 @@ Lead Singer,1"></textarea>
                 </thead>
                 <tbody id="lineUpBody"></tbody>
             </table>
+            <div id="errorMessages"></div>
             <button onclick="exportToPNG()">Exporteren naar PNG</button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab">
+            <h2>Dashboard</h2>
+            <table id="dashboardTable">
+                <thead>
+                    <tr>
+                        <th>Statistiek</th>
+                        <th>Waarde</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardBody"></tbody>
+            </table>
         </div>
     </div>
 
@@ -210,13 +242,13 @@ Lead Singer,1"></textarea>
             document.getElementById(tabName).classList.add('active');
             document.querySelector(`button[onclick="openTab('${tabName}')"]`).classList.add('active');
             if (tabName === 'competencies' || tabName === 'conflicts' || tabName === 'absences') loadDropdowns();
+            if (tabName === 'dashboard') generateDashboard();
         }
 
         // Load saved data on page load
         window.onload = function() {
             loadData('artists', 'artistsInput');
             loadData('roles', 'rolesInput');
-            loadAbsences();
             loadDropdowns();
         };
 
@@ -238,75 +270,125 @@ Lead Singer,1"></textarea>
             return text.trim().split('\n').map(line => line.split(','));
         }
 
-        // Load dropdowns
+        // Import CSV
+        function importCSV(key) {
+            const fileInput = document.getElementById(`${key}File`);
+            const file = fileInput.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        const data = results.data.map(row => row.join(',')).join('\n');
+                        document.getElementById(`${key}Input`).value = data;
+                        saveData(key);
+                    }
+                });
+            }
+        }
+
+        // Load dropdowns and tables
         function loadDropdowns() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
 
-            // Competencies
-            const compArtist = document.getElementById('compArtist');
-            const compStandardRoles = document.getElementById('compStandardRoles');
-            const compCompetencyRoles = document.getElementById('compCompetencyRoles');
-            compArtist.innerHTML = artists.map(([name]) => `<option value="${name}">${name}</option>`).join('');
-            compStandardRoles.innerHTML = roles.map(([name]) => `<option value="${name}">${name}</option>`).join('');
-            compCompetencyRoles.innerHTML = roles.map(([name]) => `<option value="${name}">${name}</option>`).join('');
-            loadCompetency();
+            // Competencies table
+            const compTableBody = document.querySelector('#competenciesTable tbody');
+            compTableBody.innerHTML = '';
+            artists.forEach(([name]) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${name}</td>
+                    <td><select multiple class="standardRoles" data-artist="${name}"></select></td>
+                    <td><select multiple class="competencyRoles" data-artist="${name}"></select></td>
+                `;
+                compTableBody.appendChild(row);
+            });
+            document.querySelectorAll('.standardRoles, .competencyRoles').forEach(select => {
+                select.innerHTML = roles.map(([name]) => `<option value="${name}">${name}</option>`).join('');
+            });
+            loadCompetencies();
 
-            // Conflicts
-            const conflictRole = document.getElementById('conflictRole');
-            conflictRole.innerHTML = roles.map(([name]) => `<option value="${name}">${name}</option>`).join('');
+            // Conflicts table
+            const conflictsTableBody = document.querySelector('#conflictsTable tbody');
+            conflictsTableBody.innerHTML = '';
+            roles.forEach(([name]) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${name}</td>
+                    <td><select multiple class="conflictRoles" data-role="${name}"></select></td>
+                    <td class="selectedConflicts" data-role="${name}"></td>
+                `;
+                conflictsTableBody.appendChild(row);
+            });
+            document.querySelectorAll('.conflictRoles').forEach(select => {
+                select.innerHTML = roles.map(([r]) => `<option value="${r}">${r}</option>`).join('');
+                select.onchange = function() {
+                    const selected = Array.from(this.selectedOptions).map(opt => opt.value);
+                    document.querySelector(`.selectedConflicts[data-role="${this.dataset.role}"]`).textContent = selected.join(', ');
+                };
+            });
             loadConflicts();
 
             // Absences
-            const absentArtists = document.getElementById('absentArtists');
-            absentArtists.innerHTML = artists.map(([name]) => `<option value="${name}">${name}</option>`).join('');
+            const absentContainer = document.getElementById('absentArtistsContainer');
+            absentContainer.innerHTML = artists.map(([name]) => `
+                <label><input type="checkbox" class="absentArtist" value="${name}"> ${name}</label>
+            `).join('<br>');
             loadAbsences();
         }
 
         // Save and load competencies
-        function saveCompetency() {
-            const artist = document.getElementById('compArtist').value;
-            const standardRoles = Array.from(document.getElementById('compStandardRoles').selectedOptions).map(opt => opt.value);
-            const competencyRoles = Array.from(document.getElementById('compCompetencyRoles').selectedOptions).map(opt => opt.value);
-            const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
-            allCompetencies[artist] = { standardRoles, competencyRoles };
+        function saveCompetencies() {
+            const allCompetencies = {};
+            document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
+                const artist = row.querySelector('.standardRoles').dataset.artist;
+                const standardRoles = Array.from(row.querySelector('.standardRoles').selectedOptions).map(opt => opt.value);
+                const competencyRoles = Array.from(row.querySelector('.competencyRoles').selectedOptions).map(opt => opt.value);
+                allCompetencies[artist] = { standardRoles, competencyRoles };
+            });
             localStorage.setItem('competencies', JSON.stringify(allCompetencies));
         }
 
-        function loadCompetency() {
-            const artist = document.getElementById('compArtist').value;
+        function loadCompetencies() {
             const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
-            const comp = allCompetencies[artist] || { standardRoles: [], competencyRoles: [] };
-            const compStandardRoles = document.getElementById('compStandardRoles');
-            const compCompetencyRoles = document.getElementById('compCompetencyRoles');
-            Array.from(compStandardRoles.options).forEach(opt => opt.selected = comp.standardRoles.includes(opt.value));
-            Array.from(compCompetencyRoles.options).forEach(opt => opt.selected = comp.competencyRoles.includes(opt.value));
+            document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
+                const artist = row.querySelector('.standardRoles').dataset.artist;
+                const comp = allCompetencies[artist] || { standardRoles: [], competencyRoles: [] };
+                Array.from(row.querySelector('.standardRoles').options).forEach(opt => opt.selected = comp.standardRoles.includes(opt.value));
+                Array.from(row.querySelector('.competencyRoles').options).forEach(opt => opt.selected = comp.competencyRoles.includes(opt.value));
+            });
         }
 
         // Save and load conflicts
         function saveConflicts() {
-            const role = document.getElementById('conflictRole').value;
-            const conflicts = document.getElementById('conflictsInput').value.trim().split('\n');
-            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
-            allConflicts[role] = conflicts;
+            const allConflicts = {};
+            document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
+                const role = row.querySelector('.conflictRoles').dataset.role;
+                const conflicts = Array.from(row.querySelector('.conflictRoles').selectedOptions).map(opt => opt.value);
+                allConflicts[role] = conflicts;
+            });
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
         }
 
         function loadConflicts() {
-            const role = document.getElementById('conflictRole').value;
             const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
-            document.getElementById('conflictsInput').value = (allConflicts[role] || []).join('\n');
+            document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
+                const role = row.querySelector('.conflictRoles').dataset.role;
+                const conflicts = allConflicts[role] || [];
+                Array.from(row.querySelector('.conflictRoles').options).forEach(opt => opt.selected = conflicts.includes(opt.value));
+                row.querySelector('.selectedConflicts').textContent = conflicts.join(', ');
+            });
         }
 
         // Add override
         function addOverride() {
-            const roles = parseInput(localStorage.getItem('roles') || '');
             const artists = parseInput(localStorage.getItem('artists') || '');
+            const roles = parseInput(localStorage.getItem('roles') || '');
             const div = document.createElement('div');
             div.className = 'dynamic-entry';
             div.innerHTML = `
-                <select class="overrideRole">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
                 <select class="overrideArtist">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="overrideRole">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <select class="overrideSource">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
                 <button class="remove-btn" onclick="this.parentElement.remove()">Verwijderen</button>
             `;
             document.getElementById('overridesList').appendChild(div);
@@ -314,27 +396,25 @@ Lead Singer,1"></textarea>
 
         // Save and load absences
         function saveAbsences() {
-            const absent = Array.from(document.getElementById('absentArtists').selectedOptions).map(opt => opt.value);
+            const absent = Array.from(document.querySelectorAll('.absentArtist:checked')).map(cb => cb.value);
             const overrides = Array.from(document.querySelectorAll('#overridesList .dynamic-entry')).map(entry => ({
+                artist: entry.querySelector('.overrideArtist').value,
                 role: entry.querySelector('.overrideRole').value,
-                artist: entry.querySelector('.overrideArtist').value
+                source: entry.querySelector('.overrideSource').value
             }));
-            const absences = { absent, overrides };
-            localStorage.setItem('absences', JSON.stringify(absences));
+            localStorage.setItem('absences', JSON.stringify({ absent, overrides }));
         }
 
         function loadAbsences() {
             const data = JSON.parse(localStorage.getItem('absences') || '{}');
-            if (data.absent) {
-                const absentArtists = document.getElementById('absentArtists');
-                data.absent.forEach(val => absentArtists.querySelector(`option[value="${val}"]`).selected = true);
-            }
+            document.querySelectorAll('.absentArtist').forEach(cb => cb.checked = (data.absent || []).includes(cb.value));
             document.getElementById('overridesList').innerHTML = '';
-            data.overrides?.forEach(({ role, artist }) => {
+            (data.overrides || []).forEach(({ artist, role, source }) => {
                 addOverride();
                 const last = document.querySelector('#overridesList .dynamic-entry:last-child');
-                last.querySelector('.overrideRole').value = role;
                 last.querySelector('.overrideArtist').value = artist;
+                last.querySelector('.overrideRole').value = role;
+                last.querySelector('.overrideSource').value = source;
             });
         }
 
@@ -346,61 +426,102 @@ Lead Singer,1"></textarea>
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
 
+            // Initialize data structures
             const artistDict = {};
             artists.forEach(([name]) => {
                 artistDict[name] = {
                     absent: absences.absent?.includes(name) || false,
                     standardRoles: competencies[name]?.standardRoles || [],
-                    competencyRoles: competencies[name]?.competencyRoles || []
+                    competencyRoles: competencies[name]?.competencyRoles || [],
+                    assignedRoles: []
                 };
             });
 
             const roleDict = {};
             roles.forEach(([name, qty]) => {
-                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [] };
+                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [], assignments: [] };
             });
 
             const lineUpBody = document.getElementById('lineUpBody');
+            const errorMessages = document.getElementById('errorMessages');
             lineUpBody.innerHTML = '';
+            errorMessages.innerHTML = '';
 
             // Apply overrides first
-            absences.overrides?.forEach(({ role, artist }) => {
+            absences.overrides?.forEach(({ artist, role, source }) => {
+                if (!artistDict[artist].absent && roleDict[role] && !artistDict[artist].assignedRoles.includes(role)) {
+                    roleDict[role].assignments.push({ artist, status: `Override van ${source}` });
+                    artistDict[artist].assignedRoles.push(role);
+                } else {
+                    errorMessages.innerHTML += `<p>Override conflict: ${artist} kan ${role} niet overnemen.</p>`;
+                }
+            });
+
+            // Assign standard roles
+            Object.keys(artistDict).forEach(artist => {
                 if (!artistDict[artist].absent) {
-                    lineUpBody.innerHTML += `<tr><td>${role}</td><td>${artist}</td><td>Override</td></tr>`;
-                    // Remove from standard artist's roles if needed
-                    const stdArtist = Object.keys(competencies).find(a => competencies[a].standardRoles.includes(role));
-                    if (stdArtist && stdArtist !== artist) {
-                        artistDict[stdArtist].standardRoles = artistDict[stdArtist].standardRoles.filter(r => r !== role);
-                    }
+                    artistDict[artist].standardRoles.forEach(role => {
+                        if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === artist)) {
+                            const canAssign = !roleDict[role].conflicts.some(conflict =>
+                                artistDict[artist].assignedRoles.includes(conflict));
+                            if (canAssign) {
+                                roleDict[role].assignments.push({ artist, status: 'Standaard' });
+                                artistDict[artist].assignedRoles.push(role);
+                            }
+                        }
+                    });
                 }
             });
 
             // Handle absent artists
             absences.absent?.forEach(absentArtist => {
-                const stdRoles = artistDict[absentArtist].standardRoles;
-                stdRoles.forEach(role => {
-                    const candidates = Object.keys(artistDict).filter(a =>
-                        !artistDict[a].absent &&
-                        artistDict[a].competencyRoles.includes(role) &&
-                        !roleDict[role].conflicts.some(conflict => artistDict[a].standardRoles.includes(conflict))
-                    );
-                    const replacement = candidates[0]; // Simplest: first available
-                    if (replacement) {
-                        lineUpBody.innerHTML += `<tr><td>${role}</td><td>${replacement}</td><td>OUT: ${absentArtist} ROLE: ${role} IN: ${replacement}</td></tr>`;
-                    } else {
-                        lineUpBody.innerHTML += `<tr><td>${role}</td><td>Niet toegewezen</td><td>Geen vervanger voor ${absentArtist}</td></tr>`;
+                artistDict[absentArtist].standardRoles.forEach(role => {
+                    if (!roleDict[role].assignments.some(a => a.artist === absentArtist)) {
+                        const candidates = Object.keys(artistDict).filter(a =>
+                            !artistDict[a].absent &&
+                            artistDict[a].competencyRoles.includes(role) &&
+                            !artistDict[a].assignedRoles.includes(role) &&
+                            !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
+                        );
+                        const replacement = candidates[0];
+                        if (replacement) {
+                            roleDict[role].assignments.push({ artist: replacement, status: `Vervanger voor ${absentArtist}` });
+                            artistDict[replacement].assignedRoles.push(role);
+                        } else {
+                            errorMessages.innerHTML += `<p>Geen vervanger gevonden voor ${role} van ${absentArtist}.</p>`;
+                        }
                     }
                 });
             });
 
-            // Add standard assignments for present artists not overridden
-            Object.keys(artistDict).forEach(artist => {
-                if (!artistDict[artist].absent) {
-                    const stdRoles = artistDict[artist].standardRoles.filter(role =>
-                        !absences.overrides?.some(o => o.role === role)
+            // Fill remaining roles
+            Object.keys(roleDict).forEach(role => {
+                while (roleDict[role].assignments.length < roleDict[role].qty) {
+                    const candidates = Object.keys(artistDict).filter(a =>
+                        !artistDict[a].absent &&
+                        artistDict[a].competencyRoles.includes(role) &&
+                        !artistDict[a].assignedRoles.includes(role) &&
+                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
                     );
-                    stdRoles.forEach(role => {
-                        lineUpBody.innerHTML += `<tr><td>${role}</td><td>${artist}</td><td>Standaard</td></tr>`;
+                    const artist = candidates[0];
+                    if (artist) {
+                        roleDict[role].assignments.push({ artist, status: 'Toegewezen' });
+                        artistDict[artist].assignedRoles.push(role);
+                    } else {
+                        break;
+                    }
+                }
+            });
+
+            // Validate and display
+            Object.keys(roleDict).forEach(role => {
+                const required = roleDict[role].qty;
+                const assigned = roleDict[role].assignments.length;
+                if (assigned !== required) {
+                    errorMessages.innerHTML += `<p>Rol ${role} heeft ${assigned} toewijzingen, maar ${required} zijn vereist.</p>`;
+                } else {
+                    roleDict[role].assignments.forEach(({ artist, status }) => {
+                        lineUpBody.innerHTML += `<tr><td>${role}</td><td>${artist}</td><td>${status}</td></tr>`;
                     });
                 }
             });
@@ -414,6 +535,38 @@ Lead Singer,1"></textarea>
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             });
+        }
+
+        // Generate dashboard
+        function generateDashboard() {
+            const artists = parseInput(localStorage.getItem('artists') || '');
+            const roles = parseInput(localStorage.getItem('roles') || '');
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+            const absences = JSON.parse(localStorage.getItem('absences') || '{}');
+
+            const dashboardBody = document.getElementById('dashboardBody');
+            dashboardBody.innerHTML = '';
+
+            // Number of artists
+            dashboardBody.innerHTML += `<tr><td>Aantal artiesten</td><td>${artists.length}</td></tr>`;
+
+            // Number of filled roles
+            let filledRoles = 0;
+            generateLineUp(); // Ensure line-up is up-to-date
+            document.querySelectorAll('#lineUpBody tr').forEach(() => filledRoles++);
+            dashboardBody.innerHTML += `<tr><td>Aantal gevulde rollen</td><td>${filledRoles}</td></tr>`;
+
+            // Number of conflicts
+            const conflictCount = Object.values(conflicts).reduce((acc, conf) => acc + conf.length, 0);
+            dashboardBody.innerHTML += `<tr><td>Aantal conflicten</td><td>${conflictCount}</td></tr>`;
+
+            // Load overview
+            const loadOverview = {};
+            Object.keys(competencies).forEach(artist => {
+                loadOverview[artist] = (competencies[artist].standardRoles || []).length;
+            });
+            dashboardBody.innerHTML += `<tr><td>Belastingoverzicht</td><td>${JSON.stringify(loadOverview)}</td></tr>`;
         }
     </script>
 </body>
