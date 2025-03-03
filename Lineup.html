@@ -143,9 +143,6 @@
             margin: 20px auto;
             display: block;
         }
-        .competency-row {
-            margin: 10px 0;
-        }
         @media (max-width: 600px) {
             .container { padding: 10px; }
             .tab-btn { padding: 10px; font-size: 14px; }
@@ -190,9 +187,9 @@
         <div class="tab-buttons">
             <button class="tab-btn active" id="absencesTab" onclick="openTab('absences')">Absences & Overrides</button>
             <button class="tab-btn" id="lineupTab" onclick="openTab('lineup')">Line-Up</button>
+            <button class="tab-btn" id="artistsTab" onclick="openTab('artists')">Artists</button>
             <button class="tab-btn" onclick="openTab('roles')">Roles & Competencies</button>
             <button class="tab-btn" onclick="openTab('conflicts')">Conflicts</button>
-            <button class="tab-btn" id="artistsTab" onclick="openTab('artists')">Artists</button>
             <button class="tab-btn" onclick="openTab('dashboard')">Dashboard</button>
         </div>
 
@@ -210,9 +207,9 @@
             <p>Overrides (replace an artist's role with another artist):</p>
             <div id="overridesList"></div>
             <button onclick="addOverride()" title="Select a new artist to take over a role from another artist">Add Override</button>
-            <button onclick="resetAbsences()">Reset Absences</button>
             <button onclick="exportOverrides()">Export Overrides to CSV</button>
             <input type="file" id="overridesFile" accept=".csv" onchange="importOverrides()">
+            <button onclick="resetAbsences()">Reset Absences</button>
         </div>
 
         <!-- Line-Up Tab -->
@@ -235,6 +232,16 @@
             <button onclick="exportToPNG()">Export to PNG</button>
         </div>
 
+        <!-- Artists Tab -->
+        <div id="artists" class="tab">
+            <h2>Artists</h2>
+            <p>Add one artist per line: "Name" (e.g., "John")</p>
+            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
+            <div id="artistsError" class="error"></div>
+            <button onclick="exportCSV('artists')">Export Artists to CSV</button>
+            <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
+        </div>
+
         <!-- Roles & Competencies Tab -->
         <div id="roles" class="tab">
             <h2>Roles & Competencies</h2>
@@ -243,7 +250,7 @@
             <div id="rolesError" class="error"></div>
             <button onclick="exportCSV('roles')">Export Roles to CSV</button>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
-            <p>Set standard and additional competency roles for each artist:</p>
+            <h3>Competencies</h3>
             <div id="competenciesError" class="error"></div>
             <table id="competenciesTable">
                 <thead>
@@ -274,16 +281,6 @@
             </table>
             <button onclick="exportConflicts()">Export Conflicts to CSV</button>
             <input type="file" id="conflictsFile" accept=".csv" onchange="importConflicts()">
-        </div>
-
-        <!-- Artists Tab -->
-        <div id="artists" class="tab">
-            <h2>Artists</h2>
-            <p>Add one artist per line: "Name" (e.g., "John")</p>
-            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
-            <div id="artistsError" class="error"></div>
-            <button onclick="exportCSV('artists')">Export Artists to CSV</button>
-            <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
         </div>
 
         <!-- Dashboard Tab -->
@@ -484,13 +481,15 @@
                 Papa.parse(file, {
                     complete: function(results) {
                         const absences = JSON.parse(localStorage.getItem('absences') || '{}');
-                        absences.overrides = results.data.slice(1).map(row => ({
+                        const overrides = results.data.slice(1).map(row => ({
                             artist: row[0],
                             role: row[1],
                             source: row[2]
                         }));
+                        absences.overrides = overrides;
                         localStorage.setItem('absences', JSON.stringify(absences));
                         loadAbsences();
+                        validateOverrides();
                     },
                     error: function() {
                         alert('Failed to import overrides CSV');
@@ -510,20 +509,24 @@
             artists.forEach(([name]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${name}</td>
+                    <td>
+                        ${name}<br>
+                        <small>Standard Roles:</small><br>
+                        <small>Additional Competencies:</small>
+                    </td>
                     <td class="roles-container">
-                        <div class="competency-row">Standard:${roles.map(([r]) => `
+                        ${roles.map(([r]) => `
                             <div class="checkbox-container">
                                 <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
                                 <label>${r}</label>
                             </div>
-                        `).join('')}</div>
-                        <div class="competency-row">Additional Competency:${roles.map(([r]) => `
+                        `).join('')}
+                        ${roles.map(([r]) => `
                             <div class="checkbox-container">
                                 <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
                                 <label>${r}</label>
                             </div>
-                        `).join('')}</div>
+                        `).join('')}
                     </td>
                 `;
                 compTableBody.appendChild(row);
@@ -661,19 +664,38 @@
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
         }
 
-        // Add override
+        // Add override with validation
         function addOverride() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
             const div = document.createElement('div');
             div.className = 'dynamic-entry';
             div.innerHTML = `
-                <label>New Artist:</label><select class="overrideArtist" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <label>Role:</label><select class="overrideRole" onchange="updateAbsences()">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <label>From Artist:</label><select class="overrideSource" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>New Artist:</label><select class="overrideArtist" onchange="validateOverride(this.parentElement)">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>Role:</label><select class="overrideRole" onchange="validateOverride(this.parentElement)">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>From Artist:</label><select class="overrideSource" onchange="validateOverride(this.parentElement)">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
                 <button class="remove-btn" onclick="this.parentElement.remove(); updateAbsences()">Remove</button>
             `;
             document.getElementById('overridesList').appendChild(div);
+            validateOverride(div);
+        }
+
+        // Validate override
+        function validateOverride(entry) {
+            const artist = entry.querySelector('.overrideArtist').value;
+            const role = entry.querySelector('.overrideRole').value;
+            const source = entry.querySelector('.overrideSource').value;
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const sourceComp = competencies[source] || { standardRoles: [], competencyRoles: [] };
+
+            if (!sourceComp.standardRoles.includes(role)) {
+                document.getElementById('errorMessages').innerHTML = `<p>Validation error: ${source} does not have ${role} as a standard role.</p>`;
+                entry.querySelector('.overrideRole').value = ''; // Reset role
+                setTimeout(() => document.getElementById('errorMessages').innerHTML = '', 3000);
+            } else {
+                updateAbsences();
+            }
         }
 
         // Save and load absences
@@ -716,7 +738,7 @@
             updateAbsences();
         }
 
-        // Generate line-up with recursive indirect assignment
+        // Generate line-up
         function generateLineUp() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
@@ -724,7 +746,6 @@
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
 
-            // Initialize data structures
             artistDict = {};
             artists.forEach(([name]) => {
                 artistDict[name] = {
@@ -737,7 +758,7 @@
 
             const roleDict = {};
             roles.forEach(([name, qty]) => {
-                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [name], assignments: [], attempted: false };
+                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [name], assignments: [] };
             });
 
             const lineUpBody = document.getElementById('lineUpBody');
@@ -749,7 +770,6 @@
             errorMessages.innerHTML = '';
             lineUpErrors.innerHTML = '';
 
-            // Apply overrides first
             absences.overrides?.forEach(({ artist, role, source }) => {
                 if (roleDict[role] && !artistDict[artist].absent && !artistDict[artist].assignedRoles.includes(role)) {
                     const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
@@ -759,15 +779,10 @@
                         if (source !== artist && artistDict[source].standardRoles.includes(role)) {
                             artistDict[source].standardRoles = artistDict[source].standardRoles.filter(r => r !== role);
                         }
-                    } else {
-                        const msg = `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
-                        errorMessages.innerHTML += msg;
-                        lineUpErrors.innerHTML += msg;
                     }
                 }
             });
 
-            // Assign standard roles for present artists
             Object.keys(artistDict).forEach(artist => {
                 if (!artistDict[artist].absent) {
                     artistDict[artist].standardRoles.forEach(role => {
@@ -782,19 +797,46 @@
                 }
             });
 
-            // Handle absent artists with recursive assignment
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
                     if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === absentArtist)) {
-                        assignRoleRecursively(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors);
+                        const candidates = Object.keys(artistDict).filter(a =>
+                            !artistDict[a].absent &&
+                            artistDict[a].competencyRoles.includes(role) &&
+                            !artistDict[a].assignedRoles.includes(role) &&
+                            !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
+                        );
+                        const replacement = candidates.find(c => roleDict[role].assignments.length < roleDict[role].qty);
+                        if (replacement) {
+                            roleDict[role].assignments.push({ artist: replacement, status: `Replacement for ${absentArtist}` });
+                            artistDict[replacement].assignedRoles.push(role);
+                        } else {
+                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
+                            errorMessages.innerHTML += msg;
+                            lineUpErrors.innerHTML += msg;
+                        }
                     }
                 });
             });
 
-            // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
-                    assignRoleRecursively(role, null, roleDict, artistDict, errorMessages, lineUpErrors);
+                    const candidates = Object.keys(artistDict).filter(a =>
+                        !artistDict[a].absent &&
+                        artistDict[a].competencyRoles.includes(role) &&
+                        !artistDict[a].assignedRoles.includes(role) &&
+                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
+                    );
+                    const artist = candidates[0];
+                    if (artist) {
+                        roleDict[role].assignments.push({ artist, status: 'Assigned' });
+                        artistDict[artist].assignedRoles.push(role);
+                    } else {
+                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
+                        errorMessages.innerHTML += msg;
+                        lineUpErrors.innerHTML += msg;
+                        break;
+                    }
                 }
                 if (roleDict[role].assignments.length > roleDict[role].qty) {
                     const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
@@ -803,7 +845,6 @@
                 }
             });
 
-            // Display line-up
             const showDate = document.getElementById('showDate').value;
             const showTime = document.getElementById('showTime').value;
             const showComments = document.getElementById('showComments').value;
@@ -819,64 +860,8 @@
             });
             filterLineUp();
 
-            // Update tab indicators
             absencesTab.classList.toggle('error', errorMessages.innerHTML !== '');
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
-        }
-
-        // Recursive role assignment
-        function assignRoleRecursively(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors, depth = 0, maxDepth = 10) {
-            if (depth > maxDepth) {
-                const msg = `<p>Max recursion depth exceeded for ${role}${absentArtist ? ` of ${absentArtist}` : ''}. Possible circular conflict.</p>`;
-                errorMessages.innerHTML += msg;
-                lineUpErrors.innerHTML += msg;
-                return false;
-            }
-
-            if (roleDict[role].attempted) return false; // Prevent infinite loops
-            roleDict[role].attempted = true;
-
-            const candidates = Object.keys(artistDict).filter(a =>
-                !artistDict[a].absent &&
-                artistDict[a].competencyRoles.includes(role) &&
-                !artistDict[a].assignedRoles.includes(role)
-            );
-
-            for (const candidate of candidates) {
-                const conflicts = roleDict[role].conflicts.filter(conflict => artistDict[candidate].assignedRoles.includes(conflict));
-                if (conflicts.length === 0 && roleDict[role].assignments.length < roleDict[role].qty) {
-                    roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
-                    artistDict[candidate].assignedRoles.push(role);
-                    roleDict[role].attempted = false;
-                    return true;
-                } else if (conflicts.length > 0) {
-                    let resolved = true;
-                    for (const conflictRole of conflicts) {
-                        const conflictAssignment = roleDict[conflictRole].assignments.find(a => a.artist === candidate);
-                        if (conflictAssignment) {
-                            const success = assignRoleRecursively(conflictRole, candidate, roleDict, artistDict, errorMessages, lineUpErrors, depth + 1, maxDepth);
-                            if (success) {
-                                roleDict[conflictRole].assignments = roleDict[conflictRole].assignments.filter(a => a.artist !== candidate);
-                                artistDict[candidate].assignedRoles = artistDict[candidate].assignedRoles.filter(r => r !== conflictRole);
-                            } else {
-                                resolved = false;
-                            }
-                        }
-                    }
-                    if (resolved && roleDict[role].assignments.length < roleDict[role].qty) {
-                        roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
-                        artistDict[candidate].assignedRoles.push(role);
-                        roleDict[role].attempted = false;
-                        return true;
-                    }
-                }
-            }
-
-            const msg = `<p>No replacement found for ${role}${absentArtist ? ` of ${absentArtist}` : ''}.</p>`;
-            errorMessages.innerHTML += msg;
-            lineUpErrors.innerHTML += msg;
-            roleDict[role].attempted = false;
-            return false;
         }
 
         // Filter line-up
