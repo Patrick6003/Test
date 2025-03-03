@@ -72,6 +72,7 @@
         th {
             background-color: #3498db;
             color: white;
+            cursor: pointer;
         }
         tr:nth-child(even) {
             background-color: #f9f9f9;
@@ -199,6 +200,7 @@
             <p>Add one artist per line: "Name" (e.g., "John")</p>
             <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
             <div id="artistsError" class="error"></div>
+            <button onclick="exportCSV('artists')">Export Artists to CSV</button>
             <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
         </div>
 
@@ -208,6 +210,7 @@
             <p>Add one role per line: "Name,Count" (e.g., "Pirate,2")</p>
             <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" oninput="validateAndSave('roles')"></textarea>
             <div id="rolesError" class="error"></div>
+            <button onclick="exportCSV('roles')">Export Roles to CSV</button>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
         </div>
 
@@ -220,11 +223,13 @@
                     <tr>
                         <th>Artist</th>
                         <th>Standard Roles</th>
-                        <th>Competency Roles</th>
+                        <th>Additional Competency Roles</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
+            <button onclick="exportCompetencies()">Export Competencies to CSV</button>
+            <input type="file" id="competenciesFile" accept=".csv" onchange="importCompetencies()">
         </div>
 
         <!-- Conflicts Tab -->
@@ -252,6 +257,8 @@
             <p>Show Date and Time:</p>
             <input type="date" id="showDate" onchange="updateAbsences()">
             <input type="time" id="showTime" onchange="updateAbsences()">
+            <p>Comments:</p>
+            <textarea id="showComments" placeholder="Additional notes..." onchange="updateAbsences()"></textarea>
             <p>Select absent artists:</p>
             <div id="absentArtistsContainer"></div>
             <p>Overrides (replace an artist's role with another artist):</p>
@@ -265,13 +272,14 @@
             <h2>Generated Line-Up</h2>
             <div id="lineUpErrors" class="error"></div>
             <p id="lineUpDateTime"></p>
+            <p id="lineUpComments"></p>
             <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
             <table id="lineUpTable">
                 <thead>
                     <tr>
-                        <th>Role</th>
-                        <th>Artist</th>
-                        <th>Status</th>
+                        <th onclick="sortLineUp(0)">Role</th>
+                        <th onclick="sortLineUp(1)">Artist</th>
+                        <th onclick="sortLineUp(2)">Status</th>
                     </tr>
                 </thead>
                 <tbody id="lineUpBody"></tbody>
@@ -379,6 +387,51 @@
             }
         }
 
+        // Export CSV
+        function exportCSV(key) {
+            const data = localStorage.getItem(key);
+            const link = document.createElement('a');
+            link.href = 'data:text/csv;charset=utf-8,' + encodeURI(data);
+            link.download = `${key}.csv`;
+            link.click();
+        }
+
+        // Export competencies to CSV
+        function exportCompetencies() {
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const csv = Object.entries(competencies).map(([artist, { standardRoles, competencyRoles }]) => 
+                `${artist},${standardRoles.join(';')},${competencyRoles.join(';')}`
+            ).join('\n');
+            const link = document.createElement('a');
+            link.href = 'data:text/csv;charset=utf-8,' + encodeURI('Artist,StandardRoles,CompetencyRoles\n' + csv);
+            link.download = 'competencies.csv';
+            link.click();
+        }
+
+        // Import competencies from CSV
+        function importCompetencies() {
+            const fileInput = document.getElementById('competenciesFile');
+            const file = fileInput.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        const allCompetencies = {};
+                        results.data.slice(1).forEach(row => {
+                            if (row.length >= 3) {
+                                const [artist, standardRoles, competencyRoles] = [row[0], row[1].split(';'), row[2].split(';')];
+                                allCompetencies[artist] = { standardRoles, competencyRoles };
+                            }
+                        });
+                        localStorage.setItem('competencies', JSON.stringify(allCompetencies));
+                        loadCompetencies();
+                    },
+                    error: function() {
+                        alert('Failed to import competencies CSV');
+                    }
+                });
+            }
+        }
+
         // Export conflicts to CSV
         function exportConflicts() {
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
@@ -471,8 +524,10 @@
             `).join('');
             const showDate = document.getElementById('showDate');
             const showTime = document.getElementById('showTime');
+            const showComments = document.getElementById('showComments');
             showDate.value = localStorage.getItem('showDate') || new Date().toISOString().split('T')[0];
             showTime.value = localStorage.getItem('showTime') || '19:00';
+            showComments.value = localStorage.getItem('showComments') || '';
             loadAbsences();
         }
 
@@ -482,7 +537,8 @@
             document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
                 const artist = row.querySelector('.standardRoles').dataset.artist;
                 const standardRoles = Array.from(row.querySelectorAll('.standardRoles:checked')).map(cb => cb.value);
-                const competencyRoles = Array.from(row.querySelectorAll('.competencyRoles:checked')).map(cb => cb.value);
+                const allCompetencyRoles = Array.from(row.querySelectorAll('.competencyRoles:checked')).map(cb => cb.value);
+                const competencyRoles = allCompetencyRoles.filter(role => !standardRoles.includes(role));
                 allCompetencies[artist] = { standardRoles, competencyRoles };
             });
             localStorage.setItem('competencies', JSON.stringify(allCompetencies));
@@ -494,7 +550,7 @@
                 const artist = row.querySelector('.standardRoles').dataset.artist;
                 const comp = allCompetencies[artist] || { standardRoles: [], competencyRoles: [] };
                 row.querySelectorAll('.standardRoles').forEach(cb => cb.checked = comp.standardRoles.includes(cb.value));
-                row.querySelectorAll('.competencyRoles').forEach(cb => cb.checked = comp.competencyRoles.includes(cb.value));
+                row.querySelectorAll('.competencyRoles').forEach(cb => cb.checked = comp.standardRoles.includes(cb.value) || comp.competencyRoles.includes(cb.value));
             });
         }
 
@@ -507,7 +563,15 @@
                 allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role];
                 row.querySelector('.selectedConflicts').textContent = allConflicts[role].join(', ');
             });
+            // Ensure symmetry
+            Object.keys(allConflicts).forEach(role => {
+                allConflicts[role].forEach(conflict => {
+                    if (!allConflicts[conflict]) allConflicts[conflict] = [];
+                    if (!allConflicts[conflict].includes(role)) allConflicts[conflict].push(role);
+                });
+            });
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
+            loadConflicts();
         }
 
         function loadConflicts() {
@@ -545,9 +609,11 @@
             }));
             const showDate = document.getElementById('showDate').value;
             const showTime = document.getElementById('showTime').value;
+            const showComments = document.getElementById('showComments').value;
             localStorage.setItem('absences', JSON.stringify({ absent, overrides }));
             localStorage.setItem('showDate', showDate);
             localStorage.setItem('showTime', showTime);
+            localStorage.setItem('showComments', showComments);
             generateLineUp();
         }
 
@@ -569,10 +635,11 @@
             document.getElementById('overridesList').innerHTML = '';
             document.getElementById('showDate').value = new Date().toISOString().split('T')[0];
             document.getElementById('showTime').value = '19:00';
+            document.getElementById('showComments').value = '';
             updateAbsences();
         }
 
-        // Generate line-up with indirect assignment
+        // Generate line-up with optimized indirect assignment
         function generateLineUp() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
@@ -639,55 +706,11 @@
                 }
             });
 
-            // Handle absent artists with indirect assignment
+            // Handle absent artists with optimized indirect assignment
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
                     if (!roleDict[role].assignments.some(a => a.artist === absentArtist)) {
-                        let assigned = false;
-                        for (const candidate of Object.keys(artistDict)) {
-                            if (!artistDict[candidate].absent && artistDict[candidate].competencyRoles.includes(role) &&
-                                !artistDict[candidate].assignedRoles.includes(role)) {
-                                const conflicts = roleDict[role].conflicts.filter(conflict => artistDict[candidate].assignedRoles.includes(conflict));
-                                if (conflicts.length === 0 && roleDict[role].assignments.length < roleDict[role].qty) {
-                                    roleDict[role].assignments.push({ artist: candidate, status: `Replacement for ${absentArtist}` });
-                                    artistDict[candidate].assignedRoles.push(role);
-                                    assigned = true;
-                                    break;
-                                } else if (conflicts.length > 0) {
-                                    // Indirect assignment: Reassign conflicting roles
-                                    for (const conflictRole of conflicts) {
-                                        const currentArtist = artistDict[candidate];
-                                        const conflictAssignment = roleDict[conflictRole].assignments.find(a => a.artist === candidate);
-                                        if (conflictAssignment) {
-                                            const indirectCandidates = Object.keys(artistDict).filter(a =>
-                                                !artistDict[a].absent &&
-                                                artistDict[a].competencyRoles.includes(conflictRole) &&
-                                                !artistDict[a].assignedRoles.includes(conflictRole) &&
-                                                !roleDict[conflictRole].conflicts.some(c => artistDict[a].assignedRoles.includes(c))
-                                            );
-                                            const indirectReplacement = indirectCandidates[0];
-                                            if (indirectReplacement && roleDict[conflictRole].assignments.length < roleDict[conflictRole].qty) {
-                                                roleDict[conflictRole].assignments = roleDict[conflictRole].assignments.filter(a => a.artist !== candidate);
-                                                roleDict[conflictRole].assignments.push({ artist: indirectReplacement, status: `Indirect for ${candidate}` });
-                                                artistDict[indirectReplacement].assignedRoles.push(conflictRole);
-                                                currentArtist.assignedRoles = currentArtist.assignedRoles.filter(r => r !== conflictRole);
-                                                roleDict[role].assignments.push({ artist: candidate, status: `Replacement for ${absentArtist}` });
-                                                currentArtist.assignedRoles.push(role);
-                                                assigned = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    if (assigned) break;
-                                }
-                            }
-                            if (assigned) break;
-                        }
-                        if (!assigned) {
-                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
-                            errorMessages.innerHTML += msg;
-                            lineUpErrors.innerHTML += msg;
-                        }
+                        assignRoleWithIndirect(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors);
                     }
                 });
             });
@@ -695,22 +718,7 @@
             // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
-                    const candidates = Object.keys(artistDict).filter(a =>
-                        !artistDict[a].absent &&
-                        artistDict[a].competencyRoles.includes(role) &&
-                        !artistDict[a].assignedRoles.includes(role) &&
-                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
-                    );
-                    const artist = candidates[0];
-                    if (artist) {
-                        roleDict[role].assignments.push({ artist, status: 'Assigned' });
-                        artistDict[artist].assignedRoles.push(role);
-                    } else {
-                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
-                        errorMessages.innerHTML += msg;
-                        lineUpErrors.innerHTML += msg;
-                        break;
-                    }
+                    assignRoleWithIndirect(role, null, roleDict, artistDict, errorMessages, lineUpErrors);
                 }
                 if (roleDict[role].assignments.length > roleDict[role].qty) {
                     const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
@@ -722,7 +730,9 @@
             // Display line-up
             const showDate = document.getElementById('showDate').value;
             const showTime = document.getElementById('showTime').value;
+            const showComments = document.getElementById('showComments').value;
             document.getElementById('lineUpDateTime').textContent = `Show Date: ${showDate} ${showTime}`;
+            document.getElementById('lineUpComments').textContent = `Comments: ${showComments}`;
             Object.keys(roleDict).forEach(role => {
                 roleDict[role].assignments.forEach(({ artist, status }) => {
                     const row = document.createElement('tr');
@@ -738,12 +748,61 @@
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
         }
 
+        // Assign role with indirect replacement
+        function assignRoleWithIndirect(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors) {
+            const candidates = Object.keys(artistDict).filter(a =>
+                !artistDict[a].absent &&
+                artistDict[a].competencyRoles.includes(role) &&
+                !artistDict[a].assignedRoles.includes(role)
+            );
+            for (const candidate of candidates) {
+                const conflicts = roleDict[role].conflicts.filter(conflict => artistDict[candidate].assignedRoles.includes(conflict));
+                if (conflicts.length === 0 && roleDict[role].assignments.length < roleDict[role].qty) {
+                    roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
+                    artistDict[candidate].assignedRoles.push(role);
+                    return true;
+                } else if (conflicts.length > 0) {
+                    let resolved = true;
+                    for (const conflictRole of conflicts) {
+                        const conflictAssignment = roleDict[conflictRole].assignments.find(a => a.artist === candidate);
+                        if (conflictAssignment) {
+                            const success = assignRoleWithIndirect(conflictRole, candidate, roleDict, artistDict, errorMessages, lineUpErrors);
+                            if (success) {
+                                roleDict[conflictRole].assignments = roleDict[conflictRole].assignments.filter(a => a.artist !== candidate);
+                                artistDict[candidate].assignedRoles = artistDict[candidate].assignedRoles.filter(r => r !== conflictRole);
+                            } else {
+                                resolved = false;
+                            }
+                        }
+                    }
+                    if (resolved && roleDict[role].assignments.length < roleDict[role].qty) {
+                        roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
+                        artistDict[candidate].assignedRoles.push(role);
+                        return true;
+                    }
+                }
+            }
+            const msg = `<p>No replacement found for ${role}${absentArtist ? ` of ${absentArtist}` : ''}.</p>`;
+            errorMessages.innerHTML += msg;
+            lineUpErrors.innerHTML += msg;
+            return false;
+        }
+
         // Filter line-up
         function filterLineUp() {
             const hideStandard = document.getElementById('hideStandard').checked;
             document.querySelectorAll('#lineUpBody tr').forEach(row => {
                 row.style.display = hideStandard && row.dataset.status === 'Standard' ? 'none' : '';
             });
+        }
+
+        // Sort line-up
+        function sortLineUp(column) {
+            const tbody = document.getElementById('lineUpBody');
+            const rows = Array.from(tbody.rows);
+            rows.sort((a, b) => a.cells[column].textContent.localeCompare(b.cells[column].textContent));
+            rows.forEach(row => tbody.appendChild(row));
+            filterLineUp();
         }
 
         // Export to PNG
@@ -767,21 +826,17 @@
             const dashboardBody = document.getElementById('dashboardBody');
             dashboardBody.innerHTML = '';
 
-            // Total artists
             dashboardBody.innerHTML += `<tr><td>Total Artists</td><td>${artists.length}</td></tr>`;
 
-            // Total roles filled
             let filledRoles = 0;
             generateLineUp();
             document.querySelectorAll('#lineUpBody tr').forEach(() => filledRoles++);
             const totalRoles = roles.reduce((sum, [, qty]) => sum + parseInt(qty), 0);
             dashboardBody.innerHTML += `<tr><td>Total Roles Filled</td><td>${filledRoles}</td></tr>`;
 
-            // Total conflicts
             const conflictCount = Object.values(conflicts).reduce((acc, conf) => acc + conf.length, 0);
             dashboardBody.innerHTML += `<tr><td>Total Conflicts Defined</td><td>${conflictCount}</td></tr>`;
 
-            // Charts
             if (rolesChart) rolesChart.destroy();
             if (loadChart) loadChart.destroy();
 
@@ -789,10 +844,7 @@
                 type: 'pie',
                 data: {
                     labels: ['Filled', 'Remaining'],
-                    datasets: [{
-                        data: [filledRoles, totalRoles - filledRoles],
-                        backgroundColor: ['#36A2EB', '#FF6384']
-                    }]
+                    datasets: [{ data: [filledRoles, totalRoles - filledRoles], backgroundColor: ['#36A2EB', '#FF6384'] }]
                 },
                 options: { title: { display: true, text: 'Role Allocation' } }
             });
@@ -805,11 +857,7 @@
                 type: 'bar',
                 data: {
                     labels: Object.keys(loadOverview),
-                    datasets: [{
-                        label: 'Roles Assigned',
-                        data: Object.values(loadOverview),
-                        backgroundColor: '#4BC0C0'
-                    }]
+                    datasets: [{ label: 'Roles Assigned', data: Object.values(loadOverview), backgroundColor: '#4BC0C0' }]
                 },
                 options: { scales: { y: { beginAtZero: true } }, title: { display: true, text: 'Load Overview' } }
             });
