@@ -306,7 +306,21 @@
     </div>
 
     <script>
+        let artistDict = {}; // Globally declared
         let rolesChart, loadChart;
+
+        // Initialize charts with empty data
+        window.onload = function() {
+            loadData('artists', 'artistsInput');
+            loadData('roles', 'rolesInput');
+            loadDropdowns();
+            const darkMode = localStorage.getItem('darkMode') || 'light';
+            document.getElementById('darkModeToggle').value = darkMode;
+            if (darkMode === 'dark') document.body.classList.add('dark-mode');
+
+            rolesChart = new Chart(document.getElementById('rolesChart'), { type: 'pie', data: { labels: [], datasets: [{}] } });
+            loadChart = new Chart(document.getElementById('loadChart'), { type: 'bar', data: { labels: [], datasets: [{}] } });
+        };
 
         // Tab handling
         function openTab(tabName) {
@@ -319,16 +333,6 @@
             if (tabName === 'dashboard') generateDashboard();
         }
 
-        // Load saved data on page load
-        window.onload = function() {
-            loadData('artists', 'artistsInput');
-            loadData('roles', 'rolesInput');
-            loadDropdowns();
-            const darkMode = localStorage.getItem('darkMode') || 'light';
-            document.getElementById('darkModeToggle').value = darkMode;
-            if (darkMode === 'dark') document.body.classList.add('dark-mode');
-        };
-
         // Save data to localStorage
         function saveData(key) {
             const input = document.getElementById(`${key}Input`);
@@ -340,22 +344,36 @@
         function validateAndSave(key) {
             const input = document.getElementById(`${key}Input`);
             const errorDiv = document.getElementById(`${key}Error`);
-            errorDiv.innerHTML = '';
             const tabBtn = document.getElementById(`${key}Tab`);
+            errorDiv.innerHTML = '';
+            tabBtn.classList.remove('error');
+
             const lines = parseInput(input.value);
+            if (!lines.length) {
+                errorDiv.innerHTML = `Geen ${key} ingevoerd.`;
+                setTimeout(() => errorDiv.innerHTML = '', 5000);
+                return;
+            }
+
             const names = lines.map(line => line[0]);
             const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
             if (duplicates.length > 0) {
-                errorDiv.innerHTML = `Duplicate ${key}: ${duplicates.join(', ')}`;
+                errorDiv.innerHTML = `Duplicaat ${key}: ${duplicates.join(', ')}`;
                 tabBtn.classList.add('error');
+                setTimeout(() => errorDiv.innerHTML = '', 5000);
                 return;
             }
-            if (key === 'roles' && lines.some(line => line.length !== 2 || isNaN(parseInt(line[1])))) {
-                errorDiv.innerHTML = 'Invalid format: Use "Name,Count" (e.g., "Pirate,2")';
-                tabBtn.classList.add('error');
-                return;
+
+            if (key === 'roles') {
+                for (const line of lines) {
+                    if (line.length !== 2 || isNaN(parseInt(line[1])) || parseInt(line[1]) < 0) {
+                        errorDiv.innerHTML = `Ongeldig formaat in "${line.join(',')}": Gebruik "Naam,Aantal" (bijv. "Piraat,2")`;
+                        tabBtn.classList.add('error');
+                        setTimeout(() => errorDiv.innerHTML = '', 5000);
+                        return;
+                    }
+                }
             }
-            tabBtn.classList.remove('error');
             saveData(key);
         }
 
@@ -367,7 +385,7 @@
 
         // Parse input text
         function parseInput(text) {
-            return text.trim().split('\n').map(line => line.split(','));
+            return text.trim().split('\n').filter(line => line.trim()).map(line => line.split(','));
         }
 
         // Import CSV
@@ -471,10 +489,13 @@
         function loadDropdowns() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
+            if (!artists.length || !roles.length) {
+                document.querySelectorAll('.tab.active .error').forEach(el => el.innerHTML = 'Waarschuwing: Artiesten en rollen moeten eerst worden ingevoerd.');
+                return;
+            }
 
-            // Competencies table
             const compTableBody = document.querySelector('#competenciesTable tbody');
-            compTableBody.innerHTML = '';
+            const fragmentComp = document.createDocumentFragment();
             artists.forEach(([name]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -492,13 +513,14 @@
                         </div>
                     `).join('')}</td>
                 `;
-                compTableBody.appendChild(row);
+                fragmentComp.appendChild(row);
             });
+            compTableBody.innerHTML = '';
+            compTableBody.appendChild(fragmentComp);
             loadCompetencies();
 
-            // Conflicts table
             const conflictsTableBody = document.querySelector('#conflictsTable tbody');
-            conflictsTableBody.innerHTML = '';
+            const fragmentConf = document.createDocumentFragment();
             roles.forEach(([name]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -511,11 +533,12 @@
                     `).join('')}</td>
                     <td class="selectedConflicts" data-role="${name}"></td>
                 `;
-                conflictsTableBody.appendChild(row);
+                fragmentConf.appendChild(row);
             });
+            conflictsTableBody.innerHTML = '';
+            conflictsTableBody.appendChild(fragmentConf);
             loadConflicts();
 
-            // Absences
             const absentContainer = document.getElementById('absentArtistsContainer');
             absentContainer.innerHTML = artists.map(([name]) => `
                 <div class="checkbox-container">
@@ -543,14 +566,14 @@
             if (isStandard) {
                 if (checkbox.checked) {
                     if (!comp.standardRoles.includes(role)) comp.standardRoles.push(role);
-                    if (!comp.competencyRoles.includes(role)) comp.competencyRoles.push(role); // Auto-add to competency
+                    if (!comp.competencyRoles.includes(role)) comp.competencyRoles.push(role);
                 } else {
                     comp.standardRoles = comp.standardRoles.filter(r => r !== role);
                 }
             } else {
                 if (!checkbox.checked && comp.standardRoles.includes(role)) {
-                    document.getElementById('competenciesError').innerHTML = `Cannot remove ${role} from ${artist}'s competencies as it is a standard role.`;
-                    checkbox.checked = true; // Revert
+                    document.getElementById('competenciesError').innerHTML = `Kan ${role} niet verwijderen uit competenties van ${artist} omdat het een standaardrol is.`;
+                    checkbox.checked = true;
                     setTimeout(() => document.getElementById('competenciesError').innerHTML = '', 3000);
                     return;
                 }
@@ -567,18 +590,6 @@
         }
 
         // Save and load competencies
-        function saveCompetencies() {
-            const allCompetencies = {};
-            document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
-                const artist = row.querySelector('.standardRoles').dataset.artist;
-                const standardRoles = Array.from(row.querySelectorAll('.standardRoles:checked')).map(cb => cb.value);
-                const allCompetencyRoles = Array.from(row.querySelectorAll('.competencyRoles:checked')).map(cb => cb.value);
-                const competencyRoles = allCompetencyRoles.filter(role => !standardRoles.includes(role));
-                allCompetencies[artist] = { standardRoles, competencyRoles };
-            });
-            localStorage.setItem('competencies', JSON.stringify(allCompetencies));
-        }
-
         function loadCompetencies() {
             const allCompetencies = JSON.parse(localStorage.getItem('competencies') || '{}');
             document.querySelectorAll('#competenciesTable tbody tr').forEach(row => {
@@ -595,8 +606,8 @@
             const conflictRole = checkbox.value;
             const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
 
-            if (!allConflicts[role]) allConflicts[role] = [role];
-            if (!allConflicts[conflictRole]) allConflicts[conflictRole] = [conflictRole];
+            if (!allConflicts[role]) allConflicts[role] = [];
+            if (!allConflicts[conflictRole]) allConflicts[conflictRole] = [];
 
             if (checkbox.checked) {
                 if (!allConflicts[role].includes(conflictRole)) allConflicts[role].push(conflictRole);
@@ -610,28 +621,12 @@
             loadConflicts();
         }
 
-        // Save and load conflicts
-        function saveConflicts() {
-            const allConflicts = {};
-            document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
-                const role = row.querySelector('.conflictRoles').dataset.role;
-                const conflicts = Array.from(row.querySelectorAll('.conflictRoles:checked')).map(cb => cb.value);
-                allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role];
-            });
-            Object.keys(allConflicts).forEach(role => {
-                allConflicts[role].forEach(conflict => {
-                    if (!allConflicts[conflict]) allConflicts[conflict] = [];
-                    if (!allConflicts[conflict].includes(role)) allConflicts[conflict].push(role);
-                });
-            });
-            localStorage.setItem('conflicts', JSON.stringify(allConflicts));
-        }
-
+        // Load conflicts
         function loadConflicts() {
             const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
                 const role = row.querySelector('.conflictRoles').dataset.role;
-                const conflicts = allConflicts[role] || [role];
+                const conflicts = allConflicts[role] || [];
                 row.querySelectorAll('.conflictRoles').forEach(cb => cb.checked = conflicts.includes(cb.value));
                 row.querySelector('.selectedConflicts').textContent = conflicts.join(', ');
             });
@@ -700,7 +695,11 @@
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
 
-            // Initialize data structures
+            if (!artists.length || !roles.length) {
+                document.getElementById('lineUpErrors').innerHTML = 'Waarschuwing: Artiesten en rollen moeten eerst worden ingevoerd.';
+                return;
+            }
+
             artistDict = {};
             artists.forEach(([name]) => {
                 artistDict[name] = {
@@ -713,19 +712,19 @@
 
             const roleDict = {};
             roles.forEach(([name, qty]) => {
-                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [name], assignments: [] };
+                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [], assignments: [] };
             });
 
             const lineUpBody = document.getElementById('lineUpBody');
             const errorMessages = document.getElementById('errorMessages');
             const lineUpErrors = document.getElementById('lineUpErrors');
             const absencesTab = document.getElementById('absencesTab');
-            const lineupTab = document.getElementById('lineupTab');
+            const lineupTab = document.get gotchaElement('lineupTab');
             lineUpBody.innerHTML = '';
             errorMessages.innerHTML = '';
             lineUpErrors.innerHTML = '';
 
-            // Apply overrides first
+            // Apply overrides
             absences.overrides?.forEach(({ artist, role, source }) => {
                 if (roleDict[role] && !artistDict[artist].absent && !artistDict[artist].assignedRoles.includes(role)) {
                     const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
@@ -736,14 +735,14 @@
                             artistDict[source].standardRoles = artistDict[source].standardRoles.filter(r => r !== role);
                         }
                     } else {
-                        const msg = `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
+                        const msg = `<p>Override conflict: ${artist} kan ${role} niet overnemen vanwege conflicten of volledige toewijzing.</p>`;
                         errorMessages.innerHTML += msg;
                         lineUpErrors.innerHTML += msg;
                     }
                 }
             });
 
-            // Assign standard roles for present artists
+            // Assign standard roles
             Object.keys(artistDict).forEach(artist => {
                 if (!artistDict[artist].absent) {
                     artistDict[artist].standardRoles.forEach(role => {
@@ -758,22 +757,19 @@
                 }
             });
 
-            // Handle absent artists with basic assignment
+            // Handle absent artists
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
                     if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === absentArtist)) {
-                        const candidates = Object.keys(artistDict).filter(a =>
-                            !artistDict[a].absent &&
-                            artistDict[a].competencyRoles.includes(role) &&
-                            !artistDict[a].assignedRoles.includes(role) &&
-                            !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
-                        );
-                        const replacement = candidates.find(c => roleDict[role].assignments.length < roleDict[role].qty);
-                        if (replacement) {
+                        const candidates = Object.keys(artistDict)
+                            .filter(a => !artistDict[a].absent && artistDict[a].competencyRoles.includes(role) && !artistDict[a].assignedRoles.includes(role) && !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict)))
+                            .sort((a, b) => artistDict[a].assignedRoles.length - artistDict[b].assignedRoles.length);
+                        const replacement = candidates[0];
+                        if (replacement && roleDict[role].assignments.length < roleDict[role].qty) {
                             roleDict[role].assignments.push({ artist: replacement, status: `Replacement for ${absentArtist}` });
                             artistDict[replacement].assignedRoles.push(role);
                         } else {
-                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
+                            const msg = `<p>Geen vervanger gevonden voor ${role} van ${absentArtist}.</p>`;
                             errorMessages.innerHTML += msg;
                             lineUpErrors.innerHTML += msg;
                         }
@@ -784,27 +780,19 @@
             // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
-                    const candidates = Object.keys(artistDict).filter(a =>
-                        !artistDict[a].absent &&
-                        artistDict[a].competencyRoles.includes(role) &&
-                        !artistDict[a].assignedRoles.includes(role) &&
-                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
-                    );
+                    const candidates = Object.keys(artistDict)
+                        .filter(a => !artistDict[a].absent && artistDict[a].competencyRoles.includes(role) && !artistDict[a].assignedRoles.includes(role) && !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict)))
+                        .sort((a, b) => artistDict[a].assignedRoles.length - artistDict[b].assignedRoles.length);
                     const artist = candidates[0];
                     if (artist) {
                         roleDict[role].assignments.push({ artist, status: 'Assigned' });
                         artistDict[artist].assignedRoles.push(role);
                     } else {
-                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
+                        const msg = `<p>Onvoldoende artiesten voor ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} toegewezen.</p>`;
                         errorMessages.innerHTML += msg;
                         lineUpErrors.innerHTML += msg;
                         break;
                     }
-                }
-                if (roleDict[role].assignments.length > roleDict[role].qty) {
-                    const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
-                    errorMessages.innerHTML += msg;
-                    lineUpErrors.innerHTML += msg;
                 }
             });
 
@@ -814,17 +802,18 @@
             const showComments = document.getElementById('showComments').value;
             document.getElementById('lineUpDateTime').textContent = `Show Date: ${showDate} ${showTime}`;
             document.getElementById('lineUpComments').textContent = `Comments: ${showComments}`;
+            const fragment = document.createDocumentFragment();
             Object.keys(roleDict).forEach(role => {
                 roleDict[role].assignments.forEach(({ artist, status }) => {
                     const row = document.createElement('tr');
                     row.dataset.status = status;
                     row.innerHTML = `<td>${role}</td><td>${artist}</td><td>${status}</td>`;
-                    lineUpBody.appendChild(row);
+                    fragment.appendChild(row);
                 });
             });
+            lineUpBody.appendChild(fragment);
             filterLineUp();
 
-            // Update tab indicators
             absencesTab.classList.toggle('error', errorMessages.innerHTML !== '');
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
         }
@@ -848,18 +837,25 @@
 
         // Export to PNG
         function exportToPNG() {
-            html2canvas(document.getElementById('lineup'), { backgroundColor: document.body.classList.contains('dark-mode') ? '#444' : '#fff' }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'show_lineup.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            });
+            setTimeout(() => {
+                html2canvas(document.getElementById('lineup'), { backgroundColor: document.body.classList.contains('dark-mode') ? '#444' : '#fff' }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = 'show_lineup.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                });
+            }, 100);
         }
 
         // Generate dashboard
         function generateDashboard() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
+            if (!artists.length || !roles.length) {
+                document.getElementById('dashboardBody').innerHTML = '<tr><td colspan="2">Waarschuwing: Artiesten en rollen moeten eerst worden ingevoerd.</td></tr>';
+                return;
+            }
+
             const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
@@ -867,46 +863,34 @@
             const dashboardBody = document.getElementById('dashboardBody');
             dashboardBody.innerHTML = '';
 
-            dashboardBody.innerHTML += `<tr><td>Total Artists</td><td>${artists.length}</td></tr>`;
+            dashboardBody.innerHTML += `<tr><td>Totale Artiesten</td><td>${artists.length}</td></tr>`;
 
             let filledRoles = 0;
             generateLineUp();
             document.querySelectorAll('#lineUpBody tr').forEach(() => filledRoles++);
             const totalRoles = roles.reduce((sum, [, qty]) => sum + parseInt(qty), 0);
-            dashboardBody.innerHTML += `<tr><td>Total Roles Filled</td><td>${filledRoles}</td></tr>`;
+            dashboardBody.innerHTML += `<tr><td>Totale Rollen Vervuld</td><td>${filledRoles}</td></tr>`;
 
             const conflictCount = Object.values(conflicts).reduce((acc, conf) => acc + conf.length, 0);
-            dashboardBody.innerHTML += `<tr><td>Total Conflicts Defined</td><td>${conflictCount}</td></tr>`;
+            dashboardBody.innerHTML += `<tr><td>Totale Conflicten Gedefinieerd</td><td>${conflictCount}</td></tr>`;
 
-            if (rolesChart) rolesChart.destroy();
-            if (loadChart) loadChart.destroy();
-
-            rolesChart = new Chart(document.getElementById('rolesChart'), {
-                type: 'pie',
-                data: {
-                    labels: [`Filled: ${filledRoles}`, `Remaining: ${totalRoles - filledRoles}`],
-                    datasets: [{ data: [filledRoles, totalRoles - filledRoles], backgroundColor: ['#36A2EB', '#FF6384'] }]
-                },
-                options: { 
-                    title: { display: true, text: 'Role Allocation' },
-                    plugins: {
-                        legend: { labels: { font: { size: 14 } } }
-                    }
-                }
-            });
+            rolesChart.data = {
+                labels: [`Vervuld: ${filledRoles}`, `Resterend: ${totalRoles - filledRoles}`],
+                datasets: [{ data: [filledRoles, totalRoles - filledRoles], backgroundColor: ['#36A2EB', '#FF6384'] }]
+            };
+            rolesChart.options = { title: { display: true, text: 'Rolverdeling' } };
+            rolesChart.update();
 
             const loadOverview = {};
             Object.keys(artistDict).forEach(artist => {
                 loadOverview[artist] = artistDict[artist].assignedRoles.length;
             });
-            loadChart = new Chart(document.getElementById('loadChart'), {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(loadOverview),
-                    datasets: [{ label: 'Roles Assigned', data: Object.values(loadOverview), backgroundColor: '#4BC0C0' }]
-                },
-                options: { scales: { y: { beginAtZero: true } }, title: { display: true, text: 'Load Overview' } }
-            });
+            loadChart.data = {
+                labels: Object.keys(loadOverview),
+                datasets: [{ label: 'Toegewezen Rollen', data: Object.values(loadOverview), backgroundColor: '#4BC0C0' }]
+            };
+            loadChart.options = { scales: { y: { beginAtZero: true } }, title: { display: true, text: 'Werkverdeling' } };
+            loadChart.update();
         }
 
         // Toggle dark mode
@@ -915,9 +899,6 @@
             document.body.classList.toggle('dark-mode', mode === 'dark');
             localStorage.setItem('darkMode', mode);
         }
-
-        // Global artistDict for dashboard access
-        let artistDict = {};
     </script>
 </body>
 </html>
