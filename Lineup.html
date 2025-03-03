@@ -217,7 +217,8 @@
         <!-- Competencies Tab -->
         <div id="competencies" class="tab">
             <h2>Competencies</h2>
-            <p>Set standard and competency roles for each artist.</p>
+            <p>Set standard and additional competency roles for each artist.</p>
+            <div id="competenciesError" class="error"></div>
             <table id="competenciesTable">
                 <thead>
                     <tr>
@@ -480,13 +481,13 @@
                     <td>${name}</td>
                     <td class="roles-container">${roles.map(([r]) => `
                         <div class="checkbox-container">
-                            <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="saveCompetencies()">
+                            <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
                             <label>${r}</label>
                         </div>
                     `).join('')}</td>
                     <td class="roles-container">${roles.map(([r]) => `
                         <div class="checkbox-container">
-                            <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="saveCompetencies()">
+                            <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
                             <label>${r}</label>
                         </div>
                     `).join('')}</td>
@@ -504,7 +505,7 @@
                     <td>${name}</td>
                     <td class="roles-container">${roles.map(([r]) => `
                         <div class="checkbox-container">
-                            <input type="checkbox" class="conflictRoles" data-role="${name}" value="${r}" onchange="saveConflicts()">
+                            <input type="checkbox" class="conflictRoles" data-role="${name}" value="${r}" onchange="updateConflicts(this)">
                             <label>${r}</label>
                         </div>
                     `).join('')}</td>
@@ -531,6 +532,40 @@
             loadAbsences();
         }
 
+        // Update competencies with validation
+        function updateCompetencies(checkbox) {
+            const artist = checkbox.dataset.artist;
+            const role = checkbox.value;
+            const isStandard = checkbox.classList.contains('standardRoles');
+            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
+            const comp = competencies[artist] || { standardRoles: [], competencyRoles: [] };
+
+            if (isStandard) {
+                if (checkbox.checked) {
+                    if (!comp.standardRoles.includes(role)) comp.standardRoles.push(role);
+                    if (!comp.competencyRoles.includes(role)) comp.competencyRoles.push(role); // Auto-add to competency
+                } else {
+                    comp.standardRoles = comp.standardRoles.filter(r => r !== role);
+                }
+            } else {
+                if (!checkbox.checked && comp.standardRoles.includes(role)) {
+                    document.getElementById('competenciesError').innerHTML = `Cannot remove ${role} from ${artist}'s competencies as it is a standard role.`;
+                    checkbox.checked = true; // Revert
+                    setTimeout(() => document.getElementById('competenciesError').innerHTML = '', 3000);
+                    return;
+                }
+                if (checkbox.checked) {
+                    if (!comp.competencyRoles.includes(role)) comp.competencyRoles.push(role);
+                } else {
+                    comp.competencyRoles = comp.competencyRoles.filter(r => r !== role);
+                }
+            }
+
+            competencies[artist] = comp;
+            localStorage.setItem('competencies', JSON.stringify(competencies));
+            loadCompetencies();
+        }
+
         // Save and load competencies
         function saveCompetencies() {
             const allCompetencies = {};
@@ -554,6 +589,27 @@
             });
         }
 
+        // Update conflicts symmetrically
+        function updateConflicts(checkbox) {
+            const role = checkbox.dataset.role;
+            const conflictRole = checkbox.value;
+            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+
+            if (!allConflicts[role]) allConflicts[role] = [role];
+            if (!allConflicts[conflictRole]) allConflicts[conflictRole] = [conflictRole];
+
+            if (checkbox.checked) {
+                if (!allConflicts[role].includes(conflictRole)) allConflicts[role].push(conflictRole);
+                if (!allConflicts[conflictRole].includes(role)) allConflicts[conflictRole].push(role);
+            } else {
+                allConflicts[role] = allConflicts[role].filter(r => r !== conflictRole);
+                allConflicts[conflictRole] = allConflicts[conflictRole].filter(r => r !== role);
+            }
+
+            localStorage.setItem('conflicts', JSON.stringify(allConflicts));
+            loadConflicts();
+        }
+
         // Save and load conflicts
         function saveConflicts() {
             const allConflicts = {};
@@ -562,7 +618,6 @@
                 const conflicts = Array.from(row.querySelectorAll('.conflictRoles:checked')).map(cb => cb.value);
                 allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role];
             });
-            // Ensure symmetry
             Object.keys(allConflicts).forEach(role => {
                 allConflicts[role].forEach(conflict => {
                     if (!allConflicts[conflict]) allConflicts[conflict] = [];
@@ -570,7 +625,6 @@
                 });
             });
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
-            loadConflicts();
         }
 
         function loadConflicts() {
@@ -830,10 +884,15 @@
             rolesChart = new Chart(document.getElementById('rolesChart'), {
                 type: 'pie',
                 data: {
-                    labels: ['Filled', 'Remaining'],
+                    labels: [`Filled: ${filledRoles}`, `Remaining: ${totalRoles - filledRoles}`],
                     datasets: [{ data: [filledRoles, totalRoles - filledRoles], backgroundColor: ['#36A2EB', '#FF6384'] }]
                 },
-                options: { title: { display: true, text: 'Role Allocation' } }
+                options: { 
+                    title: { display: true, text: 'Role Allocation' },
+                    plugins: {
+                        legend: { labels: { font: { size: 14 } } }
+                    }
+                }
             });
 
             const loadOverview = {};
