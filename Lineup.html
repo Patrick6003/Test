@@ -143,6 +143,9 @@
             margin: 20px auto;
             display: block;
         }
+        .competency-row {
+            margin: 10px 0;
+        }
         @media (max-width: 600px) {
             .container { padding: 10px; }
             .tab-btn { padding: 10px; font-size: 14px; }
@@ -185,46 +188,68 @@
 
         <!-- Tab Buttons -->
         <div class="tab-buttons">
-            <button class="tab-btn active" id="artistsTab" onclick="openTab('artists')">Artists</button>
-            <button class="tab-btn" id="rolesTab" onclick="openTab('roles')">Roles</button>
-            <button class="tab-btn" onclick="openTab('competencies')">Competencies</button>
-            <button class="tab-btn" onclick="openTab('conflicts')">Conflicts</button>
-            <button class="tab-btn" id="absencesTab" onclick="openTab('absences')">Absences</button>
+            <button class="tab-btn active" id="absencesTab" onclick="openTab('absences')">Absences & Overrides</button>
             <button class="tab-btn" id="lineupTab" onclick="openTab('lineup')">Line-Up</button>
+            <button class="tab-btn" onclick="openTab('roles')">Roles & Competencies</button>
+            <button class="tab-btn" onclick="openTab('conflicts')">Conflicts</button>
+            <button class="tab-btn" id="artistsTab" onclick="openTab('artists')">Artists</button>
             <button class="tab-btn" onclick="openTab('dashboard')">Dashboard</button>
         </div>
 
-        <!-- Artists Tab -->
-        <div id="artists" class="tab active">
-            <h2>Artists</h2>
-            <p>Add one artist per line: "Name" (e.g., "John")</p>
-            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
-            <div id="artistsError" class="error"></div>
-            <button onclick="exportCSV('artists')">Export Artists to CSV</button>
-            <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
+        <!-- Absences & Overrides Tab -->
+        <div id="absences" class="tab active">
+            <h2>Absences & Overrides</h2>
+            <div id="errorMessages" class="error"></div>
+            <p>Show Date and Time:</p>
+            <input type="date" id="showDate" onchange="updateAbsences()">
+            <input type="time" id="showTime" onchange="updateAbsences()">
+            <p>Comments:</p>
+            <textarea id="showComments" placeholder="Additional notes..." onchange="updateAbsences()"></textarea>
+            <p>Select absent artists:</p>
+            <div id="absentArtistsContainer"></div>
+            <p>Overrides (replace an artist's role with another artist):</p>
+            <div id="overridesList"></div>
+            <button onclick="addOverride()" title="Select a new artist to take over a role from another artist">Add Override</button>
+            <button onclick="resetAbsences()">Reset Absences</button>
+            <button onclick="exportOverrides()">Export Overrides to CSV</button>
+            <input type="file" id="overridesFile" accept=".csv" onchange="importOverrides()">
         </div>
 
-        <!-- Roles Tab -->
+        <!-- Line-Up Tab -->
+        <div id="lineup" class="tab">
+            <h2>Line-Up</h2>
+            <div id="lineUpErrors" class="error"></div>
+            <p id="lineUpDateTime"></p>
+            <p id="lineUpComments"></p>
+            <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
+            <table id="lineUpTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortLineUp(0)">Role</th>
+                        <th onclick="sortLineUp(1)">Artist</th>
+                        <th onclick="sortLineUp(2)">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="lineUpBody"></tbody>
+            </table>
+            <button onclick="exportToPNG()">Export to PNG</button>
+        </div>
+
+        <!-- Roles & Competencies Tab -->
         <div id="roles" class="tab">
-            <h2>Roles</h2>
+            <h2>Roles & Competencies</h2>
             <p>Add one role per line: "Name,Count" (e.g., "Pirate,2")</p>
             <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" oninput="validateAndSave('roles')"></textarea>
             <div id="rolesError" class="error"></div>
             <button onclick="exportCSV('roles')">Export Roles to CSV</button>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
-        </div>
-
-        <!-- Competencies Tab -->
-        <div id="competencies" class="tab">
-            <h2>Competencies</h2>
-            <p>Set standard and additional competency roles for each artist.</p>
+            <p>Set standard and additional competency roles for each artist:</p>
             <div id="competenciesError" class="error"></div>
             <table id="competenciesTable">
                 <thead>
                     <tr>
                         <th>Artist</th>
-                        <th>Standard Roles</th>
-                        <th>Additional Competency Roles</th>
+                        <th>Roles</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -251,41 +276,14 @@
             <input type="file" id="conflictsFile" accept=".csv" onchange="importConflicts()">
         </div>
 
-        <!-- Absences Tab -->
-        <div id="absences" class="tab">
-            <h2>Absences & Overrides</h2>
-            <div id="errorMessages" class="error"></div>
-            <p>Show Date and Time:</p>
-            <input type="date" id="showDate" onchange="updateAbsences()">
-            <input type="time" id="showTime" onchange="updateAbsences()">
-            <p>Comments:</p>
-            <textarea id="showComments" placeholder="Additional notes..." onchange="updateAbsences()"></textarea>
-            <p>Select absent artists:</p>
-            <div id="absentArtistsContainer"></div>
-            <p>Overrides (replace an artist's role with another artist):</p>
-            <div id="overridesList"></div>
-            <button onclick="addOverride()" title="Select a new artist to take over a role from another artist">Add Override</button>
-            <button onclick="resetAbsences()">Reset Absences</button>
-        </div>
-
-        <!-- Line-Up Tab -->
-        <div id="lineup" class="tab">
-            <h2>Generated Line-Up</h2>
-            <div id="lineUpErrors" class="error"></div>
-            <p id="lineUpDateTime"></p>
-            <p id="lineUpComments"></p>
-            <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
-            <table id="lineUpTable">
-                <thead>
-                    <tr>
-                        <th onclick="sortLineUp(0)">Role</th>
-                        <th onclick="sortLineUp(1)">Artist</th>
-                        <th onclick="sortLineUp(2)">Status</th>
-                    </tr>
-                </thead>
-                <tbody id="lineUpBody"></tbody>
-            </table>
-            <button onclick="exportToPNG()">Export to PNG</button>
+        <!-- Artists Tab -->
+        <div id="artists" class="tab">
+            <h2>Artists</h2>
+            <p>Add one artist per line: "Name" (e.g., "John")</p>
+            <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
+            <div id="artistsError" class="error"></div>
+            <button onclick="exportCSV('artists')">Export Artists to CSV</button>
+            <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
         </div>
 
         <!-- Dashboard Tab -->
@@ -314,7 +312,7 @@
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             document.querySelector(`button[onclick="openTab('${tabName}')"]`).classList.add('active');
-            if (['competencies', 'conflicts', 'absences'].includes(tabName)) loadDropdowns();
+            if (['roles', 'conflicts', 'absences'].includes(tabName)) loadDropdowns();
             if (tabName === 'lineup') generateLineUp();
             if (tabName === 'dashboard') generateDashboard();
         }
@@ -467,6 +465,40 @@
             }
         }
 
+        // Export overrides to CSV
+        function exportOverrides() {
+            const absences = JSON.parse(localStorage.getItem('absences') || '{}');
+            const overrides = absences.overrides || [];
+            const csv = overrides.map(({ artist, role, source }) => `${artist},${role},${source}`).join('\n');
+            const link = document.createElement('a');
+            link.href = 'data:text/csv;charset=utf-8,' + encodeURI('NewArtist,Role,FromArtist\n' + csv);
+            link.download = 'overrides.csv';
+            link.click();
+        }
+
+        // Import overrides from CSV
+        function importOverrides() {
+            const fileInput = document.getElementById('overridesFile');
+            const file = fileInput.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        const absences = JSON.parse(localStorage.getItem('absences') || '{}');
+                        absences.overrides = results.data.slice(1).map(row => ({
+                            artist: row[0],
+                            role: row[1],
+                            source: row[2]
+                        }));
+                        localStorage.setItem('absences', JSON.stringify(absences));
+                        loadAbsences();
+                    },
+                    error: function() {
+                        alert('Failed to import overrides CSV');
+                    }
+                });
+            }
+        }
+
         // Load dropdowns and tables
         function loadDropdowns() {
             const artists = parseInput(localStorage.getItem('artists') || '');
@@ -479,18 +511,20 @@
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${name}</td>
-                    <td class="roles-container">${roles.map(([r]) => `
-                        <div class="checkbox-container">
-                            <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
-                            <label>${r}</label>
-                        </div>
-                    `).join('')}</td>
-                    <td class="roles-container">${roles.map(([r]) => `
-                        <div class="checkbox-container">
-                            <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
-                            <label>${r}</label>
-                        </div>
-                    `).join('')}</td>
+                    <td class="roles-container">
+                        <div class="competency-row">Standard:${roles.map(([r]) => `
+                            <div class="checkbox-container">
+                                <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
+                                <label>${r}</label>
+                            </div>
+                        `).join('')}</div>
+                        <div class="competency-row">Additional Competency:${roles.map(([r]) => `
+                            <div class="checkbox-container">
+                                <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
+                                <label>${r}</label>
+                            </div>
+                        `).join('')}</div>
+                    </td>
                 `;
                 compTableBody.appendChild(row);
             });
@@ -627,16 +661,6 @@
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
         }
 
-        function loadConflicts() {
-            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
-            document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
-                const role = row.querySelector('.conflictRoles').dataset.role;
-                const conflicts = allConflicts[role] || [role];
-                row.querySelectorAll('.conflictRoles').forEach(cb => cb.checked = conflicts.includes(cb.value));
-                row.querySelector('.selectedConflicts').textContent = conflicts.join(', ');
-            });
-        }
-
         // Add override
         function addOverride() {
             const artists = parseInput(localStorage.getItem('artists') || '');
@@ -692,7 +716,7 @@
             updateAbsences();
         }
 
-        // Generate line-up
+        // Generate line-up with recursive indirect assignment
         function generateLineUp() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
@@ -713,7 +737,7 @@
 
             const roleDict = {};
             roles.forEach(([name, qty]) => {
-                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [name], assignments: [] };
+                roleDict[name] = { qty: parseInt(qty), conflicts: conflicts[name] || [name], assignments: [], attempted: false };
             });
 
             const lineUpBody = document.getElementById('lineUpBody');
@@ -758,25 +782,11 @@
                 }
             });
 
-            // Handle absent artists with basic assignment
+            // Handle absent artists with recursive assignment
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
                     if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === absentArtist)) {
-                        const candidates = Object.keys(artistDict).filter(a =>
-                            !artistDict[a].absent &&
-                            artistDict[a].competencyRoles.includes(role) &&
-                            !artistDict[a].assignedRoles.includes(role) &&
-                            !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
-                        );
-                        const replacement = candidates.find(c => roleDict[role].assignments.length < roleDict[role].qty);
-                        if (replacement) {
-                            roleDict[role].assignments.push({ artist: replacement, status: `Replacement for ${absentArtist}` });
-                            artistDict[replacement].assignedRoles.push(role);
-                        } else {
-                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
-                            errorMessages.innerHTML += msg;
-                            lineUpErrors.innerHTML += msg;
-                        }
+                        assignRoleRecursively(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors);
                     }
                 });
             });
@@ -784,22 +794,7 @@
             // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
-                    const candidates = Object.keys(artistDict).filter(a =>
-                        !artistDict[a].absent &&
-                        artistDict[a].competencyRoles.includes(role) &&
-                        !artistDict[a].assignedRoles.includes(role) &&
-                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
-                    );
-                    const artist = candidates[0];
-                    if (artist) {
-                        roleDict[role].assignments.push({ artist, status: 'Assigned' });
-                        artistDict[artist].assignedRoles.push(role);
-                    } else {
-                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
-                        errorMessages.innerHTML += msg;
-                        lineUpErrors.innerHTML += msg;
-                        break;
-                    }
+                    assignRoleRecursively(role, null, roleDict, artistDict, errorMessages, lineUpErrors);
                 }
                 if (roleDict[role].assignments.length > roleDict[role].qty) {
                     const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
@@ -827,6 +822,61 @@
             // Update tab indicators
             absencesTab.classList.toggle('error', errorMessages.innerHTML !== '');
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
+        }
+
+        // Recursive role assignment
+        function assignRoleRecursively(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors, depth = 0, maxDepth = 10) {
+            if (depth > maxDepth) {
+                const msg = `<p>Max recursion depth exceeded for ${role}${absentArtist ? ` of ${absentArtist}` : ''}. Possible circular conflict.</p>`;
+                errorMessages.innerHTML += msg;
+                lineUpErrors.innerHTML += msg;
+                return false;
+            }
+
+            if (roleDict[role].attempted) return false; // Prevent infinite loops
+            roleDict[role].attempted = true;
+
+            const candidates = Object.keys(artistDict).filter(a =>
+                !artistDict[a].absent &&
+                artistDict[a].competencyRoles.includes(role) &&
+                !artistDict[a].assignedRoles.includes(role)
+            );
+
+            for (const candidate of candidates) {
+                const conflicts = roleDict[role].conflicts.filter(conflict => artistDict[candidate].assignedRoles.includes(conflict));
+                if (conflicts.length === 0 && roleDict[role].assignments.length < roleDict[role].qty) {
+                    roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
+                    artistDict[candidate].assignedRoles.push(role);
+                    roleDict[role].attempted = false;
+                    return true;
+                } else if (conflicts.length > 0) {
+                    let resolved = true;
+                    for (const conflictRole of conflicts) {
+                        const conflictAssignment = roleDict[conflictRole].assignments.find(a => a.artist === candidate);
+                        if (conflictAssignment) {
+                            const success = assignRoleRecursively(conflictRole, candidate, roleDict, artistDict, errorMessages, lineUpErrors, depth + 1, maxDepth);
+                            if (success) {
+                                roleDict[conflictRole].assignments = roleDict[conflictRole].assignments.filter(a => a.artist !== candidate);
+                                artistDict[candidate].assignedRoles = artistDict[candidate].assignedRoles.filter(r => r !== conflictRole);
+                            } else {
+                                resolved = false;
+                            }
+                        }
+                    }
+                    if (resolved && roleDict[role].assignments.length < roleDict[role].qty) {
+                        roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
+                        artistDict[candidate].assignedRoles.push(role);
+                        roleDict[role].attempted = false;
+                        return true;
+                    }
+                }
+            }
+
+            const msg = `<p>No replacement found for ${role}${absentArtist ? ` of ${absentArtist}` : ''}.</p>`;
+            errorMessages.innerHTML += msg;
+            lineUpErrors.innerHTML += msg;
+            roleDict[role].attempted = false;
+            return false;
         }
 
         // Filter line-up
@@ -889,9 +939,7 @@
                 },
                 options: { 
                     title: { display: true, text: 'Role Allocation' },
-                    plugins: {
-                        legend: { labels: { font: { size: 14 } } }
-                    }
+                    plugins: { legend: { labels: { font: { size: 14 } } } }
                 }
             });
 
