@@ -185,55 +185,17 @@
 
         <!-- Tab Buttons -->
         <div class="tab-buttons">
-            <button class="tab-btn active" id="absencesTab" onclick="openTab('absences')">Absences & Overrides</button>
-            <button class="tab-btn" id="lineupTab" onclick="openTab('lineup')">Line-Up</button>
-            <button class="tab-btn" id="artistsTab" onclick="openTab('artists')">Artists</button>
-            <button class="tab-btn" onclick="openTab('roles')">Roles & Competencies</button>
+            <button class="tab-btn active" id="artistsTab" onclick="openTab('artists')">Artists</button>
+            <button class="tab-btn" id="rolesTab" onclick="openTab('roles')">Roles</button>
+            <button class="tab-btn" onclick="openTab('competencies')">Competencies</button>
             <button class="tab-btn" onclick="openTab('conflicts')">Conflicts</button>
+            <button class="tab-btn" id="absencesTab" onclick="openTab('absences')">Absences</button>
+            <button class="tab-btn" id="lineupTab" onclick="openTab('lineup')">Line-Up</button>
             <button class="tab-btn" onclick="openTab('dashboard')">Dashboard</button>
         </div>
 
-        <!-- Absences & Overrides Tab -->
-        <div id="absences" class="tab active">
-            <h2>Absences & Overrides</h2>
-            <div id="errorMessages" class="error"></div>
-            <p>Show Date and Time:</p>
-            <input type="date" id="showDate" onchange="updateAbsences()">
-            <input type="time" id="showTime" onchange="updateAbsences()">
-            <p>Comments:</p>
-            <textarea id="showComments" placeholder="Additional notes..." onchange="updateAbsences()"></textarea>
-            <p>Select absent artists:</p>
-            <div id="absentArtistsContainer"></div>
-            <p>Overrides (replace an artist's role with another artist):</p>
-            <div id="overridesList"></div>
-            <button onclick="addOverride()" title="Select a new artist to take over a role from another artist">Add Override</button>
-            <button onclick="exportOverrides()">Export Overrides to CSV</button>
-            <input type="file" id="overridesFile" accept=".csv" onchange="importOverrides()">
-            <button onclick="resetAbsences()">Reset Absences</button>
-        </div>
-
-        <!-- Line-Up Tab -->
-        <div id="lineup" class="tab">
-            <h2>Line-Up</h2>
-            <div id="lineUpErrors" class="error"></div>
-            <p id="lineUpDateTime"></p>
-            <p id="lineUpComments"></p>
-            <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
-            <table id="lineUpTable">
-                <thead>
-                    <tr>
-                        <th onclick="sortLineUp(0)">Role</th>
-                        <th onclick="sortLineUp(1)">Artist</th>
-                        <th onclick="sortLineUp(2)">Status</th>
-                    </tr>
-                </thead>
-                <tbody id="lineUpBody"></tbody>
-            </table>
-            <button onclick="exportToPNG()">Export to PNG</button>
-        </div>
-
         <!-- Artists Tab -->
-        <div id="artists" class="tab">
+        <div id="artists" class="tab active">
             <h2>Artists</h2>
             <p>Add one artist per line: "Name" (e.g., "John")</p>
             <textarea id="artistsInput" placeholder="John\nEmma\nAlex" oninput="validateAndSave('artists')"></textarea>
@@ -242,21 +204,27 @@
             <input type="file" id="artistsFile" accept=".csv" onchange="importCSV('artists')">
         </div>
 
-        <!-- Roles & Competencies Tab -->
+        <!-- Roles Tab -->
         <div id="roles" class="tab">
-            <h2>Roles & Competencies</h2>
+            <h2>Roles</h2>
             <p>Add one role per line: "Name,Count" (e.g., "Pirate,2")</p>
             <textarea id="rolesInput" placeholder="Pirate,2\nLead Singer,1" oninput="validateAndSave('roles')"></textarea>
             <div id="rolesError" class="error"></div>
             <button onclick="exportCSV('roles')">Export Roles to CSV</button>
             <input type="file" id="rolesFile" accept=".csv" onchange="importCSV('roles')">
-            <h3>Competencies</h3>
+        </div>
+
+        <!-- Competencies Tab -->
+        <div id="competencies" class="tab">
+            <h2>Competencies</h2>
+            <p>Set standard and additional competency roles for each artist.</p>
             <div id="competenciesError" class="error"></div>
             <table id="competenciesTable">
                 <thead>
                     <tr>
                         <th>Artist</th>
-                        <th>Roles</th>
+                        <th>Standard Roles</th>
+                        <th>Additional Competency Roles</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -281,6 +249,43 @@
             </table>
             <button onclick="exportConflicts()">Export Conflicts to CSV</button>
             <input type="file" id="conflictsFile" accept=".csv" onchange="importConflicts()">
+        </div>
+
+        <!-- Absences Tab -->
+        <div id="absences" class="tab">
+            <h2>Absences & Overrides</h2>
+            <div id="errorMessages" class="error"></div>
+            <p>Show Date and Time:</p>
+            <input type="date" id="showDate" onchange="updateAbsences()">
+            <input type="time" id="showTime" onchange="updateAbsences()">
+            <p>Comments:</p>
+            <textarea id="showComments" placeholder="Additional notes..." onchange="updateAbsences()"></textarea>
+            <p>Select absent artists:</p>
+            <div id="absentArtistsContainer"></div>
+            <p>Overrides (replace an artist's role with another artist):</p>
+            <div id="overridesList"></div>
+            <button onclick="addOverride()" title="Select a new artist to take over a role from another artist">Add Override</button>
+            <button onclick="resetAbsences()">Reset Absences</button>
+        </div>
+
+        <!-- Line-Up Tab -->
+        <div id="lineup" class="tab">
+            <h2>Generated Line-Up</h2>
+            <div id="lineUpErrors" class="error"></div>
+            <p id="lineUpDateTime"></p>
+            <p id="lineUpComments"></p>
+            <label><input type="checkbox" id="hideStandard" onchange="filterLineUp()"> Hide Standard Assignments</label>
+            <table id="lineUpTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortLineUp(0)">Role</th>
+                        <th onclick="sortLineUp(1)">Artist</th>
+                        <th onclick="sortLineUp(2)">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="lineUpBody"></tbody>
+            </table>
+            <button onclick="exportToPNG()">Export to PNG</button>
         </div>
 
         <!-- Dashboard Tab -->
@@ -309,7 +314,7 @@
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
             document.querySelector(`button[onclick="openTab('${tabName}')"]`).classList.add('active');
-            if (['roles', 'conflicts', 'absences'].includes(tabName)) loadDropdowns();
+            if (['competencies', 'conflicts', 'absences'].includes(tabName)) loadDropdowns();
             if (tabName === 'lineup') generateLineUp();
             if (tabName === 'dashboard') generateDashboard();
         }
@@ -462,42 +467,6 @@
             }
         }
 
-        // Export overrides to CSV
-        function exportOverrides() {
-            const absences = JSON.parse(localStorage.getItem('absences') || '{}');
-            const overrides = absences.overrides || [];
-            const csv = overrides.map(({ artist, role, source }) => `${artist},${role},${source}`).join('\n');
-            const link = document.createElement('a');
-            link.href = 'data:text/csv;charset=utf-8,' + encodeURI('NewArtist,Role,FromArtist\n' + csv);
-            link.download = 'overrides.csv';
-            link.click();
-        }
-
-        // Import overrides from CSV
-        function importOverrides() {
-            const fileInput = document.getElementById('overridesFile');
-            const file = fileInput.files[0];
-            if (file) {
-                Papa.parse(file, {
-                    complete: function(results) {
-                        const absences = JSON.parse(localStorage.getItem('absences') || '{}');
-                        const overrides = results.data.slice(1).map(row => ({
-                            artist: row[0],
-                            role: row[1],
-                            source: row[2]
-                        }));
-                        absences.overrides = overrides;
-                        localStorage.setItem('absences', JSON.stringify(absences));
-                        loadAbsences();
-                        validateOverrides();
-                    },
-                    error: function() {
-                        alert('Failed to import overrides CSV');
-                    }
-                });
-            }
-        }
-
         // Load dropdowns and tables
         function loadDropdowns() {
             const artists = parseInput(localStorage.getItem('artists') || '');
@@ -509,25 +478,19 @@
             artists.forEach(([name]) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>
-                        ${name}<br>
-                        <small>Standard Roles:</small><br>
-                        <small>Additional Competencies:</small>
-                    </td>
-                    <td class="roles-container">
-                        ${roles.map(([r]) => `
-                            <div class="checkbox-container">
-                                <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
-                                <label>${r}</label>
-                            </div>
-                        `).join('')}
-                        ${roles.map(([r]) => `
-                            <div class="checkbox-container">
-                                <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
-                                <label>${r}</label>
-                            </div>
-                        `).join('')}
-                    </td>
+                    <td>${name}</td>
+                    <td class="roles-container">${roles.map(([r]) => `
+                        <div class="checkbox-container">
+                            <input type="checkbox" class="standardRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
+                            <label>${r}</label>
+                        </div>
+                    `).join('')}</td>
+                    <td class="roles-container">${roles.map(([r]) => `
+                        <div class="checkbox-container">
+                            <input type="checkbox" class="competencyRoles" data-artist="${name}" value="${r}" onchange="updateCompetencies(this)">
+                            <label>${r}</label>
+                        </div>
+                    `).join('')}</td>
                 `;
                 compTableBody.appendChild(row);
             });
@@ -664,38 +627,29 @@
             localStorage.setItem('conflicts', JSON.stringify(allConflicts));
         }
 
-        // Add override with validation
+        function loadConflicts() {
+            const allConflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
+            document.querySelectorAll('#conflictsTable tbody tr').forEach(row => {
+                const role = row.querySelector('.conflictRoles').dataset.role;
+                const conflicts = allConflicts[role] || [role];
+                row.querySelectorAll('.conflictRoles').forEach(cb => cb.checked = conflicts.includes(cb.value));
+                row.querySelector('.selectedConflicts').textContent = conflicts.join(', ');
+            });
+        }
+
+        // Add override
         function addOverride() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
-            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
             const div = document.createElement('div');
             div.className = 'dynamic-entry';
             div.innerHTML = `
-                <label>New Artist:</label><select class="overrideArtist" onchange="validateOverride(this.parentElement)">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <label>Role:</label><select class="overrideRole" onchange="validateOverride(this.parentElement)">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
-                <label>From Artist:</label><select class="overrideSource" onchange="validateOverride(this.parentElement)">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>New Artist:</label><select class="overrideArtist" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>Role:</label><select class="overrideRole" onchange="updateAbsences()">${roles.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
+                <label>From Artist:</label><select class="overrideSource" onchange="updateAbsences()">${artists.map(([name]) => `<option value="${name}">${name}</option>`).join('')}</select>
                 <button class="remove-btn" onclick="this.parentElement.remove(); updateAbsences()">Remove</button>
             `;
             document.getElementById('overridesList').appendChild(div);
-            validateOverride(div);
-        }
-
-        // Validate override
-        function validateOverride(entry) {
-            const artist = entry.querySelector('.overrideArtist').value;
-            const role = entry.querySelector('.overrideRole').value;
-            const source = entry.querySelector('.overrideSource').value;
-            const competencies = JSON.parse(localStorage.getItem('competencies') || '{}');
-            const sourceComp = competencies[source] || { standardRoles: [], competencyRoles: [] };
-
-            if (!sourceComp.standardRoles.includes(role)) {
-                document.getElementById('errorMessages').innerHTML = `<p>Validation error: ${source} does not have ${role} as a standard role.</p>`;
-                entry.querySelector('.overrideRole').value = ''; // Reset role
-                setTimeout(() => document.getElementById('errorMessages').innerHTML = '', 3000);
-            } else {
-                updateAbsences();
-            }
         }
 
         // Save and load absences
@@ -746,6 +700,7 @@
             const conflicts = JSON.parse(localStorage.getItem('conflicts') || '{}');
             const absences = JSON.parse(localStorage.getItem('absences') || '{}');
 
+            // Initialize data structures
             artistDict = {};
             artists.forEach(([name]) => {
                 artistDict[name] = {
@@ -770,6 +725,7 @@
             errorMessages.innerHTML = '';
             lineUpErrors.innerHTML = '';
 
+            // Apply overrides first
             absences.overrides?.forEach(({ artist, role, source }) => {
                 if (roleDict[role] && !artistDict[artist].absent && !artistDict[artist].assignedRoles.includes(role)) {
                     const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
@@ -779,10 +735,15 @@
                         if (source !== artist && artistDict[source].standardRoles.includes(role)) {
                             artistDict[source].standardRoles = artistDict[source].standardRoles.filter(r => r !== role);
                         }
+                    } else {
+                        const msg = `<p>Override conflict: ${artist} cannot take ${role} due to conflicts or full allocation.</p>`;
+                        errorMessages.innerHTML += msg;
+                        lineUpErrors.innerHTML += msg;
                     }
                 }
             });
 
+            // Assign standard roles for present artists
             Object.keys(artistDict).forEach(artist => {
                 if (!artistDict[artist].absent) {
                     artistDict[artist].standardRoles.forEach(role => {
@@ -797,6 +758,7 @@
                 }
             });
 
+            // Handle absent artists with basic assignment
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
                     if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === absentArtist)) {
@@ -819,6 +781,7 @@
                 });
             });
 
+            // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
                     const candidates = Object.keys(artistDict).filter(a =>
@@ -845,6 +808,7 @@
                 }
             });
 
+            // Display line-up
             const showDate = document.getElementById('showDate').value;
             const showTime = document.getElementById('showTime').value;
             const showComments = document.getElementById('showComments').value;
@@ -860,6 +824,7 @@
             });
             filterLineUp();
 
+            // Update tab indicators
             absencesTab.classList.toggle('error', errorMessages.innerHTML !== '');
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
         }
@@ -924,7 +889,9 @@
                 },
                 options: { 
                     title: { display: true, text: 'Role Allocation' },
-                    plugins: { legend: { labels: { font: { size: 14 } } } }
+                    plugins: {
+                        legend: { labels: { font: { size: 14 } } }
+                    }
                 }
             });
 
