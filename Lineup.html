@@ -561,7 +561,6 @@
                 const role = row.querySelector('.conflictRoles').dataset.role;
                 const conflicts = Array.from(row.querySelectorAll('.conflictRoles:checked')).map(cb => cb.value);
                 allConflicts[role] = conflicts.includes(role) ? conflicts : [...conflicts, role];
-                row.querySelector('.selectedConflicts').textContent = allConflicts[role].join(', ');
             });
             // Ensure symmetry
             Object.keys(allConflicts).forEach(role => {
@@ -639,7 +638,7 @@
             updateAbsences();
         }
 
-        // Generate line-up with optimized indirect assignment
+        // Generate line-up
         function generateLineUp() {
             const artists = parseInput(localStorage.getItem('artists') || '');
             const roles = parseInput(localStorage.getItem('roles') || '');
@@ -674,7 +673,7 @@
 
             // Apply overrides first
             absences.overrides?.forEach(({ artist, role, source }) => {
-                if (!artistDict[artist].absent && roleDict[role] && !artistDict[artist].assignedRoles.includes(role)) {
+                if (roleDict[role] && !artistDict[artist].absent && !artistDict[artist].assignedRoles.includes(role)) {
                     const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
                     if (canAssign && roleDict[role].assignments.length < roleDict[role].qty) {
                         roleDict[role].assignments.push({ artist, status: `Override from ${source}` });
@@ -694,8 +693,7 @@
             Object.keys(artistDict).forEach(artist => {
                 if (!artistDict[artist].absent) {
                     artistDict[artist].standardRoles.forEach(role => {
-                        if (roleDict[role] && roleDict[role].assignments.length < roleDict[role].qty &&
-                            !artistDict[artist].assignedRoles.includes(role)) {
+                        if (roleDict[role] && roleDict[role].assignments.length < roleDict[role].qty && !artistDict[artist].assignedRoles.includes(role)) {
                             const canAssign = !roleDict[role].conflicts.some(conflict => artistDict[artist].assignedRoles.includes(conflict));
                             if (canAssign) {
                                 roleDict[role].assignments.push({ artist, status: 'Standard' });
@@ -706,11 +704,25 @@
                 }
             });
 
-            // Handle absent artists with optimized indirect assignment
+            // Handle absent artists with basic assignment
             absences.absent?.forEach(absentArtist => {
                 artistDict[absentArtist].standardRoles.forEach(role => {
-                    if (!roleDict[role].assignments.some(a => a.artist === absentArtist)) {
-                        assignRoleWithIndirect(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors);
+                    if (roleDict[role] && !roleDict[role].assignments.some(a => a.artist === absentArtist)) {
+                        const candidates = Object.keys(artistDict).filter(a =>
+                            !artistDict[a].absent &&
+                            artistDict[a].competencyRoles.includes(role) &&
+                            !artistDict[a].assignedRoles.includes(role) &&
+                            !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
+                        );
+                        const replacement = candidates.find(c => roleDict[role].assignments.length < roleDict[role].qty);
+                        if (replacement) {
+                            roleDict[role].assignments.push({ artist: replacement, status: `Replacement for ${absentArtist}` });
+                            artistDict[replacement].assignedRoles.push(role);
+                        } else {
+                            const msg = `<p>No replacement found for ${role} of ${absentArtist}.</p>`;
+                            errorMessages.innerHTML += msg;
+                            lineUpErrors.innerHTML += msg;
+                        }
                     }
                 });
             });
@@ -718,7 +730,22 @@
             // Fill remaining roles
             Object.keys(roleDict).forEach(role => {
                 while (roleDict[role].assignments.length < roleDict[role].qty) {
-                    assignRoleWithIndirect(role, null, roleDict, artistDict, errorMessages, lineUpErrors);
+                    const candidates = Object.keys(artistDict).filter(a =>
+                        !artistDict[a].absent &&
+                        artistDict[a].competencyRoles.includes(role) &&
+                        !artistDict[a].assignedRoles.includes(role) &&
+                        !roleDict[role].conflicts.some(conflict => artistDict[a].assignedRoles.includes(conflict))
+                    );
+                    const artist = candidates[0];
+                    if (artist) {
+                        roleDict[role].assignments.push({ artist, status: 'Assigned' });
+                        artistDict[artist].assignedRoles.push(role);
+                    } else {
+                        const msg = `<p>Insufficient artists for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} assigned.</p>`;
+                        errorMessages.innerHTML += msg;
+                        lineUpErrors.innerHTML += msg;
+                        break;
+                    }
                 }
                 if (roleDict[role].assignments.length > roleDict[role].qty) {
                     const msg = `<p>Too many assignments for ${role}: ${roleDict[role].assignments.length}/${roleDict[role].qty} required.</p>`;
@@ -746,46 +773,6 @@
             // Update tab indicators
             absencesTab.classList.toggle('error', errorMessages.innerHTML !== '');
             lineupTab.classList.toggle('error', lineUpErrors.innerHTML !== '');
-        }
-
-        // Assign role with indirect replacement
-        function assignRoleWithIndirect(role, absentArtist, roleDict, artistDict, errorMessages, lineUpErrors) {
-            const candidates = Object.keys(artistDict).filter(a =>
-                !artistDict[a].absent &&
-                artistDict[a].competencyRoles.includes(role) &&
-                !artistDict[a].assignedRoles.includes(role)
-            );
-            for (const candidate of candidates) {
-                const conflicts = roleDict[role].conflicts.filter(conflict => artistDict[candidate].assignedRoles.includes(conflict));
-                if (conflicts.length === 0 && roleDict[role].assignments.length < roleDict[role].qty) {
-                    roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
-                    artistDict[candidate].assignedRoles.push(role);
-                    return true;
-                } else if (conflicts.length > 0) {
-                    let resolved = true;
-                    for (const conflictRole of conflicts) {
-                        const conflictAssignment = roleDict[conflictRole].assignments.find(a => a.artist === candidate);
-                        if (conflictAssignment) {
-                            const success = assignRoleWithIndirect(conflictRole, candidate, roleDict, artistDict, errorMessages, lineUpErrors);
-                            if (success) {
-                                roleDict[conflictRole].assignments = roleDict[conflictRole].assignments.filter(a => a.artist !== candidate);
-                                artistDict[candidate].assignedRoles = artistDict[candidate].assignedRoles.filter(r => r !== conflictRole);
-                            } else {
-                                resolved = false;
-                            }
-                        }
-                    }
-                    if (resolved && roleDict[role].assignments.length < roleDict[role].qty) {
-                        roleDict[role].assignments.push({ artist: candidate, status: absentArtist ? `Replacement for ${absentArtist}` : 'Assigned' });
-                        artistDict[candidate].assignedRoles.push(role);
-                        return true;
-                    }
-                }
-            }
-            const msg = `<p>No replacement found for ${role}${absentArtist ? ` of ${absentArtist}` : ''}.</p>`;
-            errorMessages.innerHTML += msg;
-            lineUpErrors.innerHTML += msg;
-            return false;
         }
 
         // Filter line-up
